@@ -1635,7 +1635,7 @@ Mantenha as respostas curtas e muito amigáveis.`;
 
       {/* Configurações (Shadcn Dialog) */}
       <Dialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
-        <DialogContent className="bg-zinc-950 border border-zinc-800 text-zinc-50 sm:max-w-lg rounded-md shadow-lg flex flex-col max-h-[85vh]">
+        <DialogContent className="bg-zinc-950 border border-zinc-800 text-zinc-50 sm:max-w-lg rounded-md shadow-lg flex flex-col max-h-[85vh] overflow-hidden">
           <DialogHeader className="flex-shrink-0">
             <DialogTitle className="font-heading text-sm font-bold text-zinc-100 flex items-center gap-2 uppercase tracking-wider">
               <Settings className="w-4 h-4 text-zinc-400" /> Configurações do Kuhula
