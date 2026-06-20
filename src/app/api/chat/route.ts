@@ -145,7 +145,7 @@ export async function POST(req: Request) {
       },
       tools: SYSTEM_TOOLS,
       generationConfig: {
-        maxOutputTokens: 600,
+        maxOutputTokens: 2048,
         temperature: 0.2
       }
     };
