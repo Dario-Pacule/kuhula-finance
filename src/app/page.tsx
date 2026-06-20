@@ -156,6 +156,8 @@ export default function Home() {
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [inputApiKey, setInputApiKey] = useState<string>("");
   const [inputModel, setInputModel] = useState<string>("gemini-2.5-flash");
+  const [submitOnEnter, setSubmitOnEnter] = useState<boolean>(true);
+  const [inputSubmitOnEnter, setInputSubmitOnEnter] = useState<boolean>(true);
   
   // Chat
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -223,6 +225,11 @@ export default function Home() {
     const savedModel = localStorage.getItem("kuhula_gemini_model_next") || "gemini-2.5-flash";
     setModel(savedModel);
     setInputModel(savedModel);
+
+    const savedSubmit = localStorage.getItem("kuhula_submit_on_enter_next");
+    const parsedSubmit = savedSubmit !== null ? savedSubmit === "true" : true;
+    setSubmitOnEnter(parsedSubmit);
+    setInputSubmitOnEnter(parsedSubmit);
 
     const savedHistory = localStorage.getItem("kuhula_chat_history_next");
     if (savedHistory) {
@@ -501,8 +508,10 @@ export default function Home() {
   const handleSaveSettings = () => {
     setClientApiKey(inputApiKey);
     setModel(inputModel);
+    setSubmitOnEnter(inputSubmitOnEnter);
     localStorage.setItem("kuhula_gemini_key_next", inputApiKey);
     localStorage.setItem("kuhula_gemini_model_next", inputModel);
+    localStorage.setItem("kuhula_submit_on_enter_next", inputSubmitOnEnter ? "true" : "false");
     setIsSettingsOpen(false);
     addSystemLog("Configurações atualizadas!");
   };
@@ -1477,8 +1486,10 @@ Mantenha as respostas curtas e muito amigáveis.`;
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                handleSendMessage(inputValue);
+                if (submitOnEnter) {
+                  e.preventDefault();
+                  handleSendMessage(inputValue);
+                }
               }
             }}
             placeholder="Introduza os seus gastos ou peça conselhos..." 
@@ -1677,6 +1688,29 @@ Mantenha as respostas curtas e muito amigáveis.`;
                     <SelectItem value="gemini-1.5-flash">Gemini 1.5 Flash</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+            </div>
+
+            {/* Preferências do Chat */}
+            <div className="flex flex-col gap-2.5 border-t border-zinc-800 pt-4">
+              <h3 className="text-xs font-semibold text-zinc-300 uppercase tracking-wider">
+                Preferências do Chat
+              </h3>
+              <div className="flex items-center justify-between mt-1 p-2.5 bg-zinc-900/40 border border-zinc-800/80 rounded-md">
+                <div className="flex flex-col gap-1 pr-4">
+                  <label className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">
+                    Enviar mensagem com Enter
+                  </label>
+                  <span className="text-[9.5px] text-zinc-500 leading-relaxed -mt-0.5">
+                    Se desativado, pressionar Enter irá quebrar a linha no telemóvel e computador. Use o botão de envio para submeter.
+                  </span>
+                </div>
+                <input 
+                  type="checkbox" 
+                  checked={inputSubmitOnEnter}
+                  onChange={(e) => setInputSubmitOnEnter(e.target.checked)}
+                  className="w-4.5 h-4.5 rounded border-zinc-800 bg-zinc-950 focus:ring-zinc-500 accent-zinc-100 cursor-pointer flex-shrink-0"
+                />
               </div>
             </div>
 
