@@ -1383,7 +1383,7 @@ Mantenha as suas respostas amigáveis, empáticas, curtas, objetivas, pragmátic
       <div className="px-4 py-2 flex items-center justify-between border-b border-zinc-800 bg-zinc-950">
         {/* Esquerda: Ícone e Kuhula AI */}
         <div className="flex items-center gap-2">
-          <Bot className="w-4.5 h-4.5 text-zinc-100" />
+          <Bot className="w-4 h-4 text-zinc-100" />
           <h3 className="font-heading text-xs font-semibold text-zinc-100">Kuhula AI</h3>
         </div>
 
