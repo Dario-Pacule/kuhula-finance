@@ -384,15 +384,46 @@ export default function Home() {
   };
 
   const handleCopyDebug = () => {
-    if (typeof navigator === "undefined" || !navigator.clipboard) return;
-    navigator.clipboard.writeText(debugInfo)
-      .then(() => {
+    if (typeof navigator === "undefined") return;
+    
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(debugInfo)
+        .then(() => {
+          setIsCopied(true);
+          setTimeout(() => setIsCopied(false), 2000);
+        })
+        .catch((err) => {
+          console.error("Falha ao copiar com navigator.clipboard, usando fallback", err);
+          fallbackCopyText(debugInfo);
+        });
+    } else {
+      fallbackCopyText(debugInfo);
+    }
+  };
+
+  const fallbackCopyText = (text: string) => {
+    try {
+      const textArea = document.createElement("textarea");
+      textArea.value = text;
+      textArea.style.top = "0";
+      textArea.style.left = "0";
+      textArea.style.position = "fixed";
+      textArea.style.opacity = "0";
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      const successful = document.execCommand("copy");
+      document.body.removeChild(textArea);
+      if (successful) {
         setIsCopied(true);
         setTimeout(() => setIsCopied(false), 2000);
-      })
-      .catch((err) => {
-        console.error("Falha ao copiar", err);
-      });
+      } else {
+        alert("Não foi possível copiar automaticamente. Selecione o texto e copie manualmente.");
+      }
+    } catch (err) {
+      console.error("Erro no fallback de cópia", err);
+      alert("Não foi possível copiar automaticamente.");
+    }
   };
 
   // Funções de Gestão Manual de Contas
