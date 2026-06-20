@@ -26,7 +26,8 @@ import {
   Filter,
   CalendarDays,
   ArrowDownLeft,
-  ArrowUpRight
+  ArrowUpRight,
+  Activity
 } from "lucide-react";
 
 import { 
@@ -172,9 +173,14 @@ export default function Home() {
   const [isTyping, setIsTyping] = useState<boolean>(false);
   const [isChatCollapsed, setIsChatCollapsed] = useState<boolean>(false);
   
-  // Responsividade Móvel
+  const [activeTab, setActiveTab] = useState<"dashboard" | "chat" | "metrics">("dashboard");
+  const [tokenStats, setTokenStats] = useState({
+    totalRequests: 0,
+    promptTokens: 0,
+    completionTokens: 0,
+    totalTokens: 0
+  });
   const [isMobile, setIsMobile] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<"dashboard" | "chat">("dashboard");
 
   // Depuração de Layout
   const [isDebugOpen, setIsDebugOpen] = useState<boolean>(false);
@@ -249,6 +255,15 @@ export default function Home() {
       }
     }
 
+    const savedTokenStats = localStorage.getItem("kuhula_token_stats");
+    if (savedTokenStats) {
+      try {
+        setTokenStats(JSON.parse(savedTokenStats));
+      } catch (e) {
+        console.error("Erro ao ler estatísticas de tokens", e);
+      }
+    }
+
     // Detector de tamanho de tela para responsividade móvel
     const checkMobile = () => {
       setIsMobile(window.innerWidth < 1024);
@@ -303,6 +318,20 @@ export default function Home() {
   const saveChatHistory = (newHistory: ChatMessage[]) => {
     setMessages(newHistory);
     localStorage.setItem("kuhula_chat_history_next", JSON.stringify(newHistory));
+  };
+
+  // Atualizar Estatísticas de Tokens
+  const updateTokenStats = (prompt: number, completion: number) => {
+    setTokenStats(prev => {
+      const newStats = {
+        totalRequests: prev.totalRequests + 1,
+        promptTokens: prev.promptTokens + prompt,
+        completionTokens: prev.completionTokens + completion,
+        totalTokens: prev.totalTokens + prompt + completion
+      };
+      localStorage.setItem("kuhula_token_stats", JSON.stringify(newStats));
+      return newStats;
+    });
   };
 
   // Formatação de Moeda
@@ -776,6 +805,14 @@ ${text}`;
         throw new Error(response.error.message);
       }
 
+      // Capturar estatísticas de tokens da primeira chamada
+      if (response.usageMetadata) {
+        updateTokenStats(
+          response.usageMetadata.promptTokenCount || 0,
+          response.usageMetadata.candidatesTokenCount || 0
+        );
+      }
+
       await handleGeminiResponse(response, newHistory, state);
     } catch (err: any) {
       setIsTyping(false);
@@ -893,6 +930,14 @@ Mantenha as suas respostas altamente técnicas, estratégicas, curtas, objetivas
         setIsTyping(true);
         const secondRes = await callChatAPI(finalHistory, stateToMutate);
         setIsTyping(false);
+
+        // Capturar estatísticas de tokens da segunda chamada
+        if (secondRes.usageMetadata) {
+          updateTokenStats(
+            secondRes.usageMetadata.promptTokenCount || 0,
+            secondRes.usageMetadata.candidatesTokenCount || 0
+          );
+        }
 
         if (secondRes.candidates && secondRes.candidates[0].content && secondRes.candidates[0].content.parts) {
           const finalModelMsg = secondRes.candidates[0].content;
@@ -1605,6 +1650,103 @@ Mantenha as suas respostas altamente técnicas, estratégicas, curtas, objetivas
     </ScrollArea>
   );
 
+  // --- SEÇÃO DE MÉTRICAS DA API ---
+  const metricsSection = (
+    <ScrollArea id="metrics-container" className="w-full h-full">
+      <section className="p-4 md:p-6 flex flex-col gap-6">
+        <div className="flex flex-col gap-1.5">
+          <h2 className="font-heading text-xs font-bold text-zinc-100 flex items-center gap-2 uppercase tracking-wider">
+            <Activity className="w-3.5 h-3.5 text-zinc-400" /> Monitor de Métricas da API Gemini
+          </h2>
+          <p className="text-[11px] text-zinc-500">
+            Acompanhe o consumo acumulado de tokens, requisições e custos estimados das suas interações nesta sessão.
+          </p>
+        </div>
+
+        {/* Grid de Cartões Métricos */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <Card className="bg-zinc-900 border-zinc-800 p-4 flex flex-col rounded-lg">
+            <span className="text-[9px] text-zinc-500 font-semibold uppercase tracking-wider">Total de Chamadas</span>
+            <span className="font-heading text-lg font-bold text-zinc-100 mt-1">{tokenStats.totalRequests}</span>
+          </Card>
+
+          <Card className="bg-zinc-900 border-zinc-800 p-4 flex flex-col rounded-lg">
+            <span className="text-[9px] text-zinc-500 font-semibold uppercase tracking-wider">Tokens de Entrada</span>
+            <span className="font-heading text-lg font-bold text-blue-400 mt-1">{tokenStats.promptTokens.toLocaleString()}</span>
+          </Card>
+
+          <Card className="bg-zinc-900 border-zinc-800 p-4 flex flex-col rounded-lg">
+            <span className="text-[9px] text-zinc-500 font-semibold uppercase tracking-wider">Tokens de Saída</span>
+            <span className="font-heading text-lg font-bold text-purple-400 mt-1">{tokenStats.completionTokens.toLocaleString()}</span>
+          </Card>
+
+          <Card className="bg-zinc-900 border-zinc-800 p-4 flex flex-col rounded-lg">
+            <span className="text-[9px] text-zinc-500 font-semibold uppercase tracking-wider">Tokens Totais</span>
+            <span className="font-heading text-lg font-bold text-emerald-400 mt-1">{tokenStats.totalTokens.toLocaleString()}</span>
+          </Card>
+        </div>
+
+        {/* Segunda linha: Custos e Ações */}
+        <div className="grid md:grid-cols-2 gap-6">
+          {/* Custo Estimado */}
+          <Card className="bg-zinc-900 border-zinc-800 rounded-lg p-4 flex flex-col justify-between gap-4">
+            <div>
+              <h3 className="font-heading text-xs font-semibold text-zinc-300 uppercase tracking-wider mb-2">Custo de Operação Estimado</h3>
+              <p className="text-[11px] text-zinc-500 leading-relaxed">
+                Custo estimado se estivesse a usar a API paga do Gemini 2.5 Flash ($0.075 por 1M de tokens de entrada e $0.30 por 1M de tokens de saída).
+              </p>
+            </div>
+            <div className="flex items-baseline justify-between border-t border-zinc-800 pt-3">
+              <span className="text-[10px] text-zinc-400">Total Estimado (USD)</span>
+              <span className="font-heading text-lg font-bold text-emerald-400">
+                ${((tokenStats.promptTokens * 0.075 + tokenStats.completionTokens * 0.30) / 1000000).toFixed(6)}
+              </span>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                if (confirm("Deseja zerar todas as estatísticas de tokens?")) {
+                  const resetStats = { totalRequests: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+                  setTokenStats(resetStats);
+                  localStorage.setItem("kuhula_token_stats", JSON.stringify(resetStats));
+                }
+              }}
+              className="text-[10px] uppercase font-bold tracking-wider border-zinc-800 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-100 rounded h-8.5 w-full"
+            >
+              Zerar Estatísticas
+            </Button>
+          </Card>
+
+          {/* Quotas do Gemini Free Tier */}
+          <Card className="bg-zinc-900 border-zinc-800 rounded-lg p-4 flex flex-col gap-3">
+            <h3 className="font-heading text-xs font-semibold text-zinc-300 uppercase tracking-wider">Limites de Quota (Gemini API Free Tier)</h3>
+            <p className="text-[11px] text-zinc-500 leading-relaxed -mt-1">
+              Os limites oficiais que regulam o uso gratuito da API do Google AI Studio para o modelo Gemini 2.5 Flash:
+            </p>
+            <div className="flex flex-col gap-2 border-t border-zinc-800 pt-2.5 text-[11px] text-zinc-300">
+              <div className="flex justify-between">
+                <span className="text-zinc-500">Requisições por Minuto (RPM):</span>
+                <span className="font-semibold">15 RPM</span>
+              </div>
+              <div className="flex justify-between border-t border-zinc-800/40 pt-1.5">
+                <span className="text-zinc-500">Tokens por Minuto (TPM):</span>
+                <span className="font-semibold">1,000,000 TPM</span>
+              </div>
+              <div className="flex justify-between border-t border-zinc-800/40 pt-1.5">
+                <span className="text-zinc-500">Requisições por Dia (RPD):</span>
+                <span className="font-semibold">1,500 RPD</span>
+              </div>
+            </div>
+            <small className="text-[9.5px] text-zinc-500 leading-normal border-t border-zinc-800 pt-2">
+              *Nota: Se exceder estes limites, a API retornará o erro de limite de requisições excedido. Poderá aguardar alguns segundos ou alternar para uma chave paga.*
+            </small>
+          </Card>
+        </div>
+      </section>
+    </ScrollArea>
+  );
+
   // --- SEÇÃO DO ASSISTENTE DE CHAT (PARA DESKTOP E MÓVEL) ---
   const chatSection = (
     <section id="chat-container" className="w-full h-full bg-zinc-950/20 flex flex-col relative overflow-hidden">
@@ -1776,6 +1918,30 @@ Mantenha as suas respostas altamente técnicas, estratégicas, curtas, objetivas
           </div>
         </div>
 
+        {/* Navegação - Desktop */}
+        <div className="hidden lg:flex items-center gap-1 bg-zinc-900/60 p-0.5 rounded-md border border-zinc-800/80">
+          <button
+            onClick={() => setActiveTab("dashboard")}
+            className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded transition-all ${
+              activeTab === "dashboard"
+                ? "bg-zinc-800 text-zinc-100 shadow-sm"
+                : "text-zinc-500 hover:text-zinc-300"
+            }`}
+          >
+            Dashboard
+          </button>
+          <button
+            onClick={() => setActiveTab("metrics")}
+            className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded transition-all ${
+              activeTab === "metrics"
+                ? "bg-zinc-800 text-zinc-100 shadow-sm"
+                : "text-zinc-500 hover:text-zinc-300"
+            }`}
+          >
+            Métricas API
+          </button>
+        </div>
+
         {/* Estatísticas do Cabeçalho - Visíveis Apenas no Desktop */}
         <div className="hidden lg:flex items-center gap-4">
           <div className="flex flex-col px-4 py-1.5 bg-zinc-900 border border-zinc-800 rounded-md min-w-[130px]">
@@ -1852,6 +2018,16 @@ Mantenha as suas respostas altamente técnicas, estratégicas, curtas, objetivas
           <Wallet className="w-3.5 h-3.5" /> Painel
         </button>
         <button
+          onClick={() => setActiveTab("metrics")}
+          className={`flex-1 py-3 text-xs font-semibold uppercase tracking-wider flex items-center justify-center gap-2 border-b-2 transition-all ${
+            activeTab === "metrics"
+              ? "border-zinc-500 text-zinc-100 bg-zinc-900/30"
+              : "border-transparent text-zinc-500 hover:text-zinc-300"
+          }`}
+        >
+          <Activity className="w-3.5 h-3.5" /> Métricas
+        </button>
+        <button
           onClick={() => setActiveTab("chat")}
           className={`flex-1 py-3 text-xs font-semibold uppercase tracking-wider flex items-center justify-center gap-2 border-b-2 transition-all ${
             activeTab === "chat"
@@ -1867,13 +2043,13 @@ Mantenha as suas respostas altamente técnicas, estratégicas, curtas, objetivas
       <main className="flex-1 flex overflow-hidden relative z-10">
         {/* Vista Móvel: Visível apenas em ecrãs pequenos (< 1024px) */}
         <div className="flex h-full w-full lg:hidden">
-          {activeTab === "dashboard" ? dashboardSection : chatSection}
+          {activeTab === "dashboard" ? dashboardSection : activeTab === "metrics" ? metricsSection : chatSection}
         </div>
 
         {/* Vista Desktop: Visível apenas em ecrãs grandes (>= 1024px) */}
         <div className="hidden lg:flex h-full w-full overflow-hidden">
           <div className={`h-full transition-all duration-300 ${isChatCollapsed ? "w-full" : "w-[68%]"}`}>
-            {dashboardSection}
+            {activeTab === "metrics" ? metricsSection : dashboardSection}
           </div>
           {!isChatCollapsed && (
             <div className="h-full w-[32%] border-l border-zinc-800 transition-all duration-300">
