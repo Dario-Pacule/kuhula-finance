@@ -1769,7 +1769,7 @@ Mantenha as suas respostas altamente técnicas, estratégicas, curtas, objetivas
               Kuhula Finance
             </h1>
             <span className="text-[9px] text-zinc-400 block -mt-1 font-semibold tracking-wider">
-              NEXTJS + SHADCN UI • MOÇAMBIQUE
+              MOÇAMBIQUE
             </span>
           </div>
         </div>
