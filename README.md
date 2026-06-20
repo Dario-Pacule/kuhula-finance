@@ -1,36 +1,92 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🧠 Kuhula Finance — Gerenciador Financeiro Inteligente
 
-## Getting Started
+O **Kuhula Finance** é uma aplicação moderna de finanças pessoais que combina design premium (zinc dark mode), alta responsividade e inteligência artificial para ajudar indivíduos e famílias a organizarem as suas vidas financeiras. 
 
-First, run the development server:
+Construído com **Next.js**, **Tailwind CSS v4** e **Shadcn UI**, o Kuhula Finance integra o modelo **Gemini AI** para atuar como um assistente financeiro autónomo, capaz de sugerir estratégias de poupança, ajustar saldos e gerir contas de forma totalmente conversacional.
 
+---
+
+## 🚀 Funcionalidades Principais
+
+* **💰 Dashboard Consolidado**: Veja o saldo global unificado e a separação automática entre contas bancárias tradicionais e carteiras móveis populares (como M-Pesa, e-Mola ou mKesh).
+* **🤖 Kuhula AI (Orquestração de Inteligência Artificial)**: Um chat integrado com capacidade de executar comandos diretamente no seu painel através de *Function Calling*. A IA pode:
+  * Criar ou excluir contas financeiras.
+  * Injetar cartões de conselhos e alertas visuais de risco diretamente no seu dashboard (com níveis: *info*, *sucesso*, *aviso*, *crítico*).
+  * Recomendar e implementar metodologias financeiras famosas, como a **Regra 50/30/20** ou o **Método dos Envelopes**.
+* **📈 Previsibilidade de Caixa**: Um gráfico de área dinâmico (*Recharts*) que projeta o fluxo de caixa para os **próximos 180 dias**, tendo em conta as receitas e as despesas futuras estimadas.
+* **📂 Histórico de Transações com Filtros Avançados**:
+  * Pesquisa textual de transações por descrição, categoria ou conta.
+  * Filtros rápidos por Tipo (Receitas, Despesas, Recorrentes), Categorias dinâmicas e Contas específicas.
+  * **Design Móvel Flexível**: Barra de filtros e listagens adaptam-se automaticamente de forma fluida a ecrãs de telemóveis usando *Container Queries* do Tailwind CSS.
+* **🛡️ Persistência Híbrida Inteligente**: 
+  * Funciona localmente via `localStorage` sem qualquer configuração necessária.
+  * Sincroniza e persiste automaticamente numa base de dados na nuvem (**MongoDB Atlas**) se a variável correspondente for detetada.
+
+---
+
+## 🛠️ Tecnologias Utilizadas
+
+* **Framework**: [Next.js](https://nextjs.org/) (App Router, Turbopack)
+* **Estilização**: [Tailwind CSS](https://tailwindcss.com/)
+* **Componentes UI**: [Shadcn UI](https://ui.shadcn.com/) (Radix Primitives)
+* **Gráficos**: [Recharts](https://recharts.org/)
+* **Ícones**: [Lucide React](https://lucide.dev/)
+* **Inteligência Artificial**: [Google Gemini API](https://ai.google.dev/)
+* **Base de Dados**: [MongoDB](https://www.mongodb.com/) (com Mongoose)
+
+---
+
+## 💻 Instalação e Execução Local
+
+### Pré-requisitos
+* Node.js (v18.0.0 ou superior)
+* npm, yarn, pnpm ou bun
+
+### 1. Clonar o repositório
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git clone https://github.com/Dario-Pacule/kuhula-finance.git
+cd kuhula-finance
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 2. Instalar as dependências
+```bash
+npm install
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 3. Configurar as Variáveis de Ambiente (Opcional para modo Nuvem)
+Crie um ficheiro `.env.local` na raiz do projeto:
+```env
+MONGODB_URI=mongodb+srv://<usuario>:<senha>@cluster0.xxxx.mongodb.net/kuhula?retryWrites=true&w=majority
+GEMINI_API_KEY=sua_chave_api_do_gemini
+```
+> *Nota: Se não fornecer a `MONGODB_URI`, a aplicação funcionará em modo offline guardando todas as transações de forma segura no próprio navegador do utilizador.*
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 4. Executar o servidor de desenvolvimento
+```bash
+npm run dev
+```
+Abra o seu navegador em [http://localhost:3000](http://localhost:3000) para ver a aplicação em funcionamento.
 
-## Learn More
+---
 
-To learn more about Next.js, take a look at the following resources:
+## ⚙️ Implantação (Deploy) na Vercel + MongoDB Atlas
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Para colocar o Kuhula Finance online com sincronização em tempo real entre todos os seus dispositivos, siga os passos abaixo:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Passo 1: Configurar a Base de Dados
+1. Crie uma conta gratuita no [MongoDB Atlas](https://www.mongodb.com/cloud/atlas) e inicialize um cluster partilhado gratuito (M0).
+2. Em **Network Access**, adicione a regra para aceitar ligações de qualquer IP (`0.0.0.0/0`) pois a Vercel usa IPs dinâmicos.
+3. Crie um utilizador em **Database Access** e copie a sua *Connection String* do driver de Node.js.
 
-## Deploy on Vercel
+### Passo 2: Publicar no Vercel
+1. Instale a CLI do Vercel (`npm install -g vercel`) ou ligue diretamente o seu repositório do GitHub à plataforma da Vercel.
+2. Nas definições do projeto na Vercel, aceda a **Settings** -> **Environment Variables** e registe as variáveis:
+   * `MONGODB_URI` (String de ligação do Atlas)
+   * `GEMINI_API_KEY` (Chave de desenvolvimento do Gemini)
+3. Promova uma nova compilação (*Redeploy*) na Vercel. A aplicação passará a salvar e recuperar os seus dados do MongoDB Atlas de forma automática!
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+---
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## 📄 Licença
+
+Este projeto está licenciado sob a licença MIT. Consulte o ficheiro [LICENSE](LICENSE) para obter mais informações.
