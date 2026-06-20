@@ -894,22 +894,20 @@ Mantenha as respostas curtas e muito amigáveis.`;
     <ScrollArea id="dashboard-container" className="w-full h-full">
       <section className="@container p-4 md:p-6 flex flex-col gap-6">
       {/* Banner de Saldos Mobile (visível apenas em telas pequenas) */}
-      {isMobile && (
-        <div className="grid grid-cols-3 gap-2 bg-zinc-900 p-3 rounded-lg border border-zinc-800">
-          <div className="flex flex-col text-center">
-            <span className="text-[8px] text-zinc-500 font-semibold uppercase tracking-wider">Consolidado</span>
-            <span className="font-heading text-xs font-bold text-zinc-100 mt-0.5">{formatCurrency(totalConsolidated)}</span>
-          </div>
-          <div className="flex flex-col text-center border-l border-zinc-800">
-            <span className="text-[8px] text-zinc-500 font-semibold uppercase tracking-wider">Bancos</span>
-            <span className="font-heading text-xs font-bold text-zinc-200 mt-0.5">{formatCurrency(totalBanks)}</span>
-          </div>
-          <div className="flex flex-col text-center border-l border-zinc-800">
-            <span className="text-[8px] text-zinc-500 font-semibold uppercase tracking-wider">Carteiras</span>
-            <span className="font-heading text-xs font-bold text-zinc-200 mt-0.5">{formatCurrency(totalWallets)}</span>
-          </div>
+      <div className="grid grid-cols-3 gap-2 bg-zinc-900 p-3 rounded-lg border border-zinc-800 lg:hidden">
+        <div className="flex flex-col text-center">
+          <span className="text-[8px] text-zinc-500 font-semibold uppercase tracking-wider">Consolidado</span>
+          <span className="font-heading text-xs font-bold text-zinc-100 mt-0.5">{formatCurrency(totalConsolidated)}</span>
         </div>
-      )}
+        <div className="flex flex-col text-center border-l border-zinc-800">
+          <span className="text-[8px] text-zinc-500 font-semibold uppercase tracking-wider">Bancos</span>
+          <span className="font-heading text-xs font-bold text-zinc-200 mt-0.5">{formatCurrency(totalBanks)}</span>
+        </div>
+        <div className="flex flex-col text-center border-l border-zinc-800">
+          <span className="text-[8px] text-zinc-500 font-semibold uppercase tracking-wider">Carteiras</span>
+          <span className="font-heading text-xs font-bold text-zinc-200 mt-0.5">{formatCurrency(totalWallets)}</span>
+        </div>
+      </div>
 
         {/* Estratégias Recomendadas pela IA */}
         {state.strategies && state.strategies.length > 0 && (
@@ -1335,17 +1333,15 @@ Mantenha as respostas curtas e muito amigáveis.`;
             </div>
           </div>
         </div>
-        {!isMobile && (
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setIsChatCollapsed(true)}
-            className="w-8 h-8 text-zinc-500 hover:text-zinc-100 rounded-md"
-            title="Colapsar chat"
-          >
-            <ChevronRight className="w-4 h-4" />
-          </Button>
-        )}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => setIsChatCollapsed(true)}
+          className="hidden lg:flex w-8 h-8 text-zinc-500 hover:text-zinc-100 rounded-md items-center justify-center"
+          title="Colapsar chat"
+        >
+          <ChevronRight className="w-4 h-4" />
+        </Button>
       </div>
 
       {/* Lista de Mensagens */}
@@ -1518,12 +1514,12 @@ Mantenha as respostas curtas e muito amigáveis.`;
         {/* Ações do Cabeçalho */}
         <div className="flex items-center gap-2">
           {/* Botão de abrir chat visível no Desktop quando colapsado */}
-          {!isMobile && isChatCollapsed && (
+          {isChatCollapsed && (
             <Button
               variant="outline"
               size="sm"
               onClick={() => setIsChatCollapsed(false)}
-              className="text-xs border-zinc-800 hover:bg-zinc-900 text-zinc-300 hover:text-zinc-100 flex items-center gap-1.5 h-9 rounded-md"
+              className="hidden lg:flex text-xs border-zinc-800 hover:bg-zinc-900 text-zinc-300 hover:text-zinc-100 items-center gap-1.5 h-9 rounded-md"
             >
               <Bot className="w-3.5 h-3.5 text-zinc-400" /> Abrir Chat
             </Button>
@@ -1549,47 +1545,47 @@ Mantenha as respostas curtas e muito amigáveis.`;
       </header>
 
       {/* Barra de Navegação por Abas - Visível Apenas no Celular */}
-      {isMobile && (
-        <div className="flex border-b border-zinc-800 bg-zinc-950 lg:hidden">
-          <button
-            onClick={() => setActiveTab("dashboard")}
-            className={`flex-1 py-3 text-xs font-semibold uppercase tracking-wider flex items-center justify-center gap-2 border-b-2 transition-all ${
-              activeTab === "dashboard"
-                ? "border-zinc-500 text-zinc-100 bg-zinc-900/30"
-                : "border-transparent text-zinc-500 hover:text-zinc-300"
-            }`}
-          >
-            <Wallet className="w-3.5 h-3.5" /> Painel
-          </button>
-          <button
-            onClick={() => setActiveTab("chat")}
-            className={`flex-1 py-3 text-xs font-semibold uppercase tracking-wider flex items-center justify-center gap-2 border-b-2 transition-all ${
-              activeTab === "chat"
-                ? "border-zinc-500 text-zinc-100 bg-zinc-900/30"
-                : "border-transparent text-zinc-500 hover:text-zinc-300"
-            }`}
-          >
-            <Bot className="w-3.5 h-3.5" /> Conversa IA
-          </button>
-        </div>
-      )}
+      <div className="flex border-b border-zinc-800 bg-zinc-950 lg:hidden">
+        <button
+          onClick={() => setActiveTab("dashboard")}
+          className={`flex-1 py-3 text-xs font-semibold uppercase tracking-wider flex items-center justify-center gap-2 border-b-2 transition-all ${
+            activeTab === "dashboard"
+              ? "border-zinc-500 text-zinc-100 bg-zinc-900/30"
+              : "border-transparent text-zinc-500 hover:text-zinc-300"
+          }`}
+        >
+          <Wallet className="w-3.5 h-3.5" /> Painel
+        </button>
+        <button
+          onClick={() => setActiveTab("chat")}
+          className={`flex-1 py-3 text-xs font-semibold uppercase tracking-wider flex items-center justify-center gap-2 border-b-2 transition-all ${
+            activeTab === "chat"
+              ? "border-zinc-500 text-zinc-100 bg-zinc-900/30"
+              : "border-transparent text-zinc-500 hover:text-zinc-300"
+          }`}
+        >
+          <Bot className="w-3.5 h-3.5" /> Conversa IA
+        </button>
+      </div>
 
       {/* Main Workspace (Desktop vs Mobile) */}
       <main className="flex-1 flex overflow-hidden relative z-10">
-        {isMobile ? (
-          activeTab === "dashboard" ? dashboardSection : chatSection
-        ) : (
-          <div className="flex h-full w-full overflow-hidden">
-            <div className={`h-full transition-all duration-300 ${isChatCollapsed ? "w-full" : "w-[68%]"}`}>
-              {dashboardSection}
-            </div>
-            {!isChatCollapsed && (
-              <div className="h-full w-[32%] border-l border-zinc-800 transition-all duration-300">
-                {chatSection}
-              </div>
-            )}
+        {/* Vista Móvel: Visível apenas em ecrãs pequenos (< 1024px) */}
+        <div className="flex h-full w-full lg:hidden">
+          {activeTab === "dashboard" ? dashboardSection : chatSection}
+        </div>
+
+        {/* Vista Desktop: Visível apenas em ecrãs grandes (>= 1024px) */}
+        <div className="hidden lg:flex h-full w-full overflow-hidden">
+          <div className={`h-full transition-all duration-300 ${isChatCollapsed ? "w-full" : "w-[68%]"}`}>
+            {dashboardSection}
           </div>
-        )}
+          {!isChatCollapsed && (
+            <div className="h-full w-[32%] border-l border-zinc-800 transition-all duration-300">
+              {chatSection}
+            </div>
+          )}
+        </div>
       </main>
 
       {/* Configurações (Shadcn Dialog) */}
