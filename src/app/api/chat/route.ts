@@ -143,7 +143,11 @@ export async function POST(req: Request) {
       systemInstruction: {
         parts: [{ text: systemInstruction }]
       },
-      tools: SYSTEM_TOOLS
+      tools: SYSTEM_TOOLS,
+      generationConfig: {
+        maxOutputTokens: 600,
+        temperature: 0.2
+      }
     };
 
     const response = await fetch(url, {

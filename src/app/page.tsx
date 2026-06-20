@@ -825,8 +825,10 @@ ${JSON.stringify({
 
 Mantenha as suas respostas altamente técnicas, estratégicas, curtas, objetivas e em português de Moçambique.`;
 
-    // Filtrar histórico para enviar apenas mensagens com papéis válidos para a API do Gemini (user e model)
-    const validHistory = history.filter(msg => msg.role === "user" || msg.role === "model");
+    // Filtrar histórico para enviar apenas mensagens com papéis válidos e limitar aos últimos 7 turnos (14 mensagens) para controlar tokens e contexto
+    const validHistory = history
+      .filter(msg => msg.role === "user" || msg.role === "model")
+      .slice(-14);
 
     const res = await fetch("/api/chat", {
       method: "POST",
