@@ -56,6 +56,7 @@ import {
   SelectValue 
 } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Checkbox } from "@/components/ui/checkbox";
 import { AppState, Goal, ChatMessage } from "@/types";
 
 const DEFAULT_STATE: AppState = {
@@ -249,10 +250,26 @@ export default function Home() {
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
 
-  // Rolar para baixo ao receber novas mensagens
+  // Rolar para baixo ao receber novas mensagens ou quando o chat for aberto
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isTyping]);
+    const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
+      messagesEndRef.current?.scrollIntoView({ behavior, block: "end" });
+    };
+
+    if (!isChatCollapsed || activeTab === "chat") {
+      // Rola imediatamente de forma instantânea
+      scrollToBottom("auto");
+      
+      // Executa após breves momentos para garantir o ajuste após transição de layout
+      const timer1 = setTimeout(() => scrollToBottom("auto"), 50);
+      const timer2 = setTimeout(() => scrollToBottom("smooth"), 300);
+      
+      return () => {
+        clearTimeout(timer1);
+        clearTimeout(timer2);
+      };
+    }
+  }, [messages, isTyping, isChatCollapsed, activeTab]);
 
   // Persistir Estado Financeiro
   const saveState = async (newState: AppState) => {
@@ -651,17 +668,20 @@ ${text}`;
 
   // Chamar Rota de API
   const callChatAPI = async (history: ChatMessage[], currentState: AppState) => {
-    const systemInstruction = `Você é o Kuhula AI, um assistente financeiro pessoal de Moçambique.
-Você gerencia um painel financeiro interativo para o usuário. 
+    const systemInstruction = `Você é o Kuhula AI, um assistente e conselheiro financeiro pessoal empático, objetivo e pragmático de Moçambique.
+Sua prioridade absoluta é compreender a vida financeira do usuário e ajudá-lo a organizar suas finanças de forma gradual e consciente, indo direto ao ponto.
 
-Sempre que o usuário informar gastos, salários, metas ou limites, use as funções disponíveis (Function Calling).
-Quando o usuário pedir informações sobre o saldo ou projeção, consulte o JSON atual e explique em termos simples.
+DIRETRIZES DE COMPORTAMENTO:
+1. OBJETIVIDADE E PRAGMATISMO: Seja curto, direto e prático em suas respostas. Evite textos longos, explicações longas ou rodeios. Vá direto ao ponto, sugerindo soluções concretas. Limite suas mensagens a no máximo 2 ou 3 parágrafos curtos ou poucos tópicos claros.
+2. DIÁLOGO E EMPATIA: Ouça o usuário. Demonstre interesse genuíno pelas suas dificuldades (como dívidas, falta de dinheiro para Credelec, custos de transporte/chapa), mas de forma breve.
+3. USO MODERADO DAS FERRAMENTAS: Não chame ferramentas (Function Calling) por impulso a cada menção a um valor. Primeiro, converse de forma direta, valide a situação e sugira ações. Só use as ferramentas de transação, saldo, estratégia ou meta após uma conclusão natural da conversa ou quando o usuário aceitar ou pedir explicitamente para lançar a informação no painel.
+4. CONSELHOS PERSONALIZADOS: Apresente as metodologias financeiras como opções amigáveis e debata com o usuário qual se adapta melhor ao seu estilo de vida antes de aplicá-la.
 
 METODOLOGIAS FINANCEIRAS:
 Você conhece metodologias de finanças populares (como a Regra 50/30/20, o Método dos Envelopes, Pague-se a Si Próprio Primeiro, Bola de Neve para dívidas).
-Se o usuário pedir conselhos de organização ou concordar com uma dessas técnicas:
-1. Recomende o método no chat de forma simples e contextualizada.
-2. Aplique-o VISUALMENTE no painel do usuário:
+Se o usuário concordar em adotar um método no chat ou pedir conselhos:
+1. Recomende o método no chat de forma simples, concisa e pragmática.
+2. Aplique-o VISUALMENTE no painel do usuário usando as ferramentas quando acordado:
    - Use 'createOrUpdateStrategy' para criar cartões explicando a estratégia adotada (ex: um cartão 'Regra 50/30/20: Plano de Ação').
    - Use 'setBudgetLimit' para configurar limites de orçamento alinhados com o método (ex: 30% do rendimento mensal para Lazer).
    - Use 'adjustAccountBalance' para criar 'envelopes' virtuais se o usuário adotar o Método dos Envelopes (ex: criar conta 'Envelope Alimentação').
@@ -671,7 +691,7 @@ DETALHES DE MOÇAMBIQUE:
 - Moeda: Metical Moçambicano (símbolo: MT, ISO: MZN). Formate sempre como '1.000 MT'.
 - Carteiras Móveis: M-Pesa, e-Mola, mKesh.
 - Bancos: BCI, Millennium Bim, Standard Bank, Absa, FNB, Moza Banco.
-- Custos: Credelec, FIPAG, TV Cabo, Chapas/Txopelas.
+- Custos do dia-a-dia: Credelec, FIPAG, TV Cabo, Chapas/Txopelas.
 
 ESTADO FINANCEIRO ATUAL DO USUÁRIO EM TEMPO REAL:
 ${JSON.stringify({
@@ -682,7 +702,7 @@ ${JSON.stringify({
     recentTransactions: currentState.transactions.slice(-12)
 }, null, 2)}
 
-Mantenha as respostas curtas e muito amigáveis.`;
+Mantenha as suas respostas amigáveis, empáticas, curtas, objetivas, pragmáticas e em português de Moçambique.`;
 
     // Filtrar histórico para enviar apenas mensagens com papéis válidos para a API do Gemini (user e model)
     const validHistory = history.filter(msg => msg.role === "user" || msg.role === "model");
@@ -1360,31 +1380,32 @@ Mantenha as respostas curtas e muito amigáveis.`;
   const chatSection = (
     <section id="chat-container" className="w-full h-full bg-zinc-950/20 flex flex-col relative overflow-hidden">
       {/* Cabeçalho do Chat */}
-      <div className="p-4 flex items-center justify-between border-b border-zinc-800 bg-zinc-950">
-        <div className="flex items-center gap-3">
-          <div className="w-8.5 h-8.5 rounded bg-zinc-100 text-zinc-900 flex items-center justify-center">
-            <Bot className="w-4 h-4" />
-          </div>
-          <div>
-            <h3 className="font-heading text-xs font-semibold text-zinc-100">Kuhula AI</h3>
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <span className="relative flex h-1.5 w-1.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-zinc-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-zinc-500"></span>
-              </span>
-              <span className="text-[9px] text-zinc-400 font-semibold uppercase tracking-wider">Assessor Online</span>
-            </div>
-          </div>
+      <div className="px-4 py-2 flex items-center justify-between border-b border-zinc-800 bg-zinc-950">
+        {/* Esquerda: Ícone e Kuhula AI */}
+        <div className="flex items-center gap-2">
+          <Bot className="w-4.5 h-4.5 text-zinc-100" />
+          <h3 className="font-heading text-xs font-semibold text-zinc-100">Kuhula AI</h3>
         </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setIsChatCollapsed(true)}
-          className="hidden lg:flex w-8 h-8 text-zinc-500 hover:text-zinc-100 rounded-md items-center justify-center"
-          title="Colapsar chat"
-        >
-          <ChevronRight className="w-4 h-4" />
-        </Button>
+
+        {/* Direita: Estado (Assessor Online) e Botão Colapsar */}
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5">
+            <span className="relative flex h-1.5 w-1.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-zinc-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-zinc-500"></span>
+            </span>
+            <span className="text-[9px] text-zinc-400 font-semibold uppercase tracking-wider">Assessor Online</span>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setIsChatCollapsed(true)}
+            className="hidden lg:flex w-7 h-7 text-zinc-500 hover:text-zinc-100 rounded-md items-center justify-center"
+            title="Colapsar chat"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </Button>
+        </div>
       </div>
 
       {/* Lista de Mensagens */}
@@ -1635,8 +1656,8 @@ Mantenha as respostas curtas e muito amigáveis.`;
 
       {/* Configurações (Shadcn Dialog) */}
       <Dialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
-        <DialogContent className="bg-zinc-950 border border-zinc-800 text-zinc-50 sm:max-w-lg rounded-md shadow-lg flex flex-col max-h-[85vh] overflow-hidden">
-          <DialogHeader className="flex-shrink-0">
+        <DialogContent className="bg-zinc-950 border border-zinc-800 text-zinc-50 sm:max-w-lg rounded-md shadow-lg flex flex-col max-h-[85vh] p-0 gap-0 overflow-hidden">
+          <DialogHeader className="p-6 pb-4 flex-shrink-0">
             <DialogTitle className="font-heading text-sm font-bold text-zinc-100 flex items-center gap-2 uppercase tracking-wider">
               <Settings className="w-4 h-4 text-zinc-400" /> Configurações do Kuhula
             </DialogTitle>
@@ -1645,8 +1666,8 @@ Mantenha as respostas curtas e muito amigáveis.`;
             </DialogDescription>
           </DialogHeader>
 
-          <ScrollArea className="flex-1 min-h-0 max-h-[50vh] md:max-h-[60vh] pr-3">
-            <div className="flex flex-col gap-5 py-2">
+          <ScrollArea className="h-[350px] md:h-[450px] px-6">
+            <div className="flex flex-col gap-5 py-4">
               {/* Gemini Config */}
               <div className="flex flex-col gap-2.5">
                 <h3 className="text-xs font-semibold text-zinc-300 uppercase tracking-wider">
@@ -1706,11 +1727,9 @@ Mantenha as respostas curtas e muito amigáveis.`;
                       Se desativado, pressionar Enter irá quebrar a linha no telemóvel e computador. Use o botão de envio para submeter.
                     </span>
                   </div>
-                  <input 
-                    type="checkbox" 
+                  <Checkbox 
                     checked={inputSubmitOnEnter}
-                    onChange={(e) => setInputSubmitOnEnter(e.target.checked)}
-                    className="w-4.5 h-4.5 rounded border-zinc-800 bg-zinc-950 focus:ring-zinc-500 accent-zinc-100 cursor-pointer flex-shrink-0"
+                    onCheckedChange={setInputSubmitOnEnter}
                   />
                 </div>
               </div>
@@ -1769,10 +1788,11 @@ Mantenha as respostas curtas e muito amigáveis.`;
                   </Button>
                 </div>
               </div>
+
             </div>
           </ScrollArea>
 
-          <DialogFooter className="border-t border-zinc-800 pt-4">
+          <DialogFooter className="mx-0 mb-0 mt-0 border-t border-zinc-800 bg-zinc-900/30 px-6 py-4 flex-shrink-0" style={{ display: "flex", flexDirection: "row", justifyContent: "flex-end", gap: "0.5rem", alignItems: "center" }}>
             <Button onClick={() => setIsSettingsOpen(false)} variant="ghost" className="text-xs text-zinc-400 hover:bg-zinc-800">
               Cancelar
             </Button>
