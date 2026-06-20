@@ -1635,8 +1635,8 @@ Mantenha as respostas curtas e muito amigáveis.`;
 
       {/* Configurações (Shadcn Dialog) */}
       <Dialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
-        <DialogContent className="bg-zinc-950 border border-zinc-800 text-zinc-50 sm:max-w-lg rounded-md shadow-lg">
-          <DialogHeader>
+        <DialogContent className="bg-zinc-950 border border-zinc-800 text-zinc-50 sm:max-w-lg rounded-md shadow-lg flex flex-col max-h-[85vh]">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle className="font-heading text-sm font-bold text-zinc-100 flex items-center gap-2 uppercase tracking-wider">
               <Settings className="w-4 h-4 text-zinc-400" /> Configurações do Kuhula
             </DialogTitle>
@@ -1645,130 +1645,132 @@ Mantenha as respostas curtas e muito amigáveis.`;
             </DialogDescription>
           </DialogHeader>
 
-          <div className="flex flex-col gap-5 py-2">
-            {/* Gemini Config */}
-            <div className="flex flex-col gap-2.5">
-              <h3 className="text-xs font-semibold text-zinc-300 uppercase tracking-wider">
-                Conexão IA (Google Gemini)
-              </h3>
-              <p className="text-[10.5px] text-zinc-400 leading-relaxed -mt-1">
-                A IA é executada localmente através da API oficial. Os seus dados permanecem armazenados de forma privada no seu navegador.
-              </p>
-              <div className="flex flex-col gap-1.5 mt-1">
-                <label className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">Chave API do Gemini:</label>
-                <div className="relative flex items-center">
-                  <Input 
-                    type={showApiKey ? "text" : "password"}
-                    value={inputApiKey}
-                    onChange={(e) => setInputApiKey(e.target.value)}
-                    placeholder="Introduza a sua AI_KEY..."
-                    className="bg-zinc-900 border-zinc-800 focus-visible:border-zinc-600 rounded pr-10 text-xs text-zinc-50"
+          <ScrollArea className="flex-1 pr-3">
+            <div className="flex flex-col gap-5 py-2">
+              {/* Gemini Config */}
+              <div className="flex flex-col gap-2.5">
+                <h3 className="text-xs font-semibold text-zinc-300 uppercase tracking-wider">
+                  Conexão IA (Google Gemini)
+                </h3>
+                <p className="text-[10.5px] text-zinc-400 leading-relaxed -mt-1">
+                  A IA é executada localmente através da API oficial. Os seus dados permanecem armazenados de forma privada no seu navegador.
+                </p>
+                <div className="flex flex-col gap-1.5 mt-1">
+                  <label className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">Chave API do Gemini:</label>
+                  <div className="relative flex items-center">
+                    <Input 
+                      type={showApiKey ? "text" : "password"}
+                      value={inputApiKey}
+                      onChange={(e) => setInputApiKey(e.target.value)}
+                      placeholder="Introduza a sua AI_KEY..."
+                      className="bg-zinc-900 border-zinc-800 focus-visible:border-zinc-600 rounded pr-10 text-xs text-zinc-50"
+                    />
+                    <button 
+                      onClick={() => setShowApiKey(!showApiKey)}
+                      className="absolute right-3 text-zinc-500 hover:text-zinc-300 transition-colors"
+                    >
+                      {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  <small className="text-[9px] text-zinc-500">
+                    Obtenha uma chave grátis no <a href="https://aistudio.google.com/" target="_blank" rel="noopener noreferrer" className="text-zinc-300 hover:underline">Google AI Studio</a>.
+                  </small>
+                </div>
+
+                <div className="flex flex-col gap-1.5 mt-1">
+                  <label className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">Modelo:</label>
+                  <Select value={inputModel} onValueChange={(val) => setInputModel(val || "gemini-2.5-flash")}>
+                    <SelectTrigger className="bg-zinc-900 border-zinc-800 text-xs text-zinc-50 rounded">
+                      <SelectValue placeholder="Selecione o modelo" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-zinc-900 border border-zinc-800 text-zinc-50">
+                      <SelectItem value="gemini-2.5-flash">Gemini 2.5 Flash (Recomendado - Rápido)</SelectItem>
+                      <SelectItem value="gemini-2.0-flash">Gemini 2.0 Flash</SelectItem>
+                      <SelectItem value="gemini-1.5-flash">Gemini 1.5 Flash</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Preferências do Chat */}
+              <div className="flex flex-col gap-2.5 border-t border-zinc-800 pt-4">
+                <h3 className="text-xs font-semibold text-zinc-300 uppercase tracking-wider">
+                  Preferências do Chat
+                </h3>
+                <div className="flex items-center justify-between mt-1 p-2.5 bg-zinc-900/40 border border-zinc-800/80 rounded-md">
+                  <div className="flex flex-col gap-1 pr-4">
+                    <label className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">
+                      Enviar mensagem com Enter
+                    </label>
+                    <span className="text-[9.5px] text-zinc-500 leading-relaxed -mt-0.5">
+                      Se desativado, pressionar Enter irá quebrar a linha no telemóvel e computador. Use o botão de envio para submeter.
+                    </span>
+                  </div>
+                  <input 
+                    type="checkbox" 
+                    checked={inputSubmitOnEnter}
+                    onChange={(e) => setInputSubmitOnEnter(e.target.checked)}
+                    className="w-4.5 h-4.5 rounded border-zinc-800 bg-zinc-950 focus:ring-zinc-500 accent-zinc-100 cursor-pointer flex-shrink-0"
                   />
-                  <button 
-                    onClick={() => setShowApiKey(!showApiKey)}
-                    className="absolute right-3 text-zinc-500 hover:text-zinc-300 transition-colors"
+                </div>
+              </div>
+
+              {/* Gestão de Dados */}
+              <div className="flex flex-col gap-2.5 border-t border-zinc-800 pt-4">
+                <h3 className="text-xs font-semibold text-zinc-300 uppercase tracking-wider">
+                  Gestão de Dados Locais
+                </h3>
+                <p className="text-[10.5px] text-zinc-400 leading-relaxed -mt-1">
+                  Importe ou exporte backups do seu estado financeiro ou reinicie os dados locais.
+                </p>
+                
+                <div className="flex flex-wrap gap-2 mt-1">
+                  <Button 
+                    onClick={handleExportData} 
+                    variant="outline" 
+                    size="sm" 
+                    className="bg-zinc-900 border-zinc-800 hover:bg-zinc-800 text-xs rounded flex items-center gap-1.5 text-zinc-300 hover:text-zinc-100"
                   >
-                    {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
+                    <Download className="w-3.5 h-3.5" /> Exportar JSON
+                  </Button>
+
+                  <Button 
+                    onClick={() => importFileRef.current?.click()} 
+                    variant="outline" 
+                    size="sm" 
+                    className="bg-zinc-900 border-zinc-800 hover:bg-zinc-800 text-xs rounded flex items-center gap-1.5 text-zinc-300 hover:text-zinc-100"
+                  >
+                    <Upload className="w-3.5 h-3.5" /> Importar JSON
+                  </Button>
+                  <input 
+                    type="file" 
+                    ref={importFileRef} 
+                    onChange={handleImportData} 
+                    accept=".json" 
+                    className="hidden" 
+                  />
+
+                  <Button 
+                    onClick={handleClearChatHistory}
+                    variant="outline"
+                    size="sm"
+                    className="bg-zinc-900 border-zinc-800 hover:bg-zinc-800 text-xs rounded flex items-center gap-1.5 text-zinc-300 hover:text-zinc-100"
+                  >
+                    Limpar Chat
+                  </Button>
+
+                  <Button 
+                    onClick={handleClearAllData} 
+                    variant="destructive" 
+                    size="sm" 
+                    className="text-xs rounded flex items-center gap-1.5 bg-red-950/20 hover:bg-red-900 border border-red-900 text-red-400 hover:text-white"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" /> Apagar Tudo
+                  </Button>
                 </div>
-                <small className="text-[9px] text-zinc-500">
-                  Obtenha uma chave grátis no <a href="https://aistudio.google.com/" target="_blank" rel="noopener noreferrer" className="text-zinc-300 hover:underline">Google AI Studio</a>.
-                </small>
-              </div>
-
-              <div className="flex flex-col gap-1.5 mt-1">
-                <label className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">Modelo:</label>
-                <Select value={inputModel} onValueChange={(val) => setInputModel(val || "gemini-2.5-flash")}>
-                  <SelectTrigger className="bg-zinc-900 border-zinc-800 text-xs text-zinc-50 rounded">
-                    <SelectValue placeholder="Selecione o modelo" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-zinc-900 border border-zinc-800 text-zinc-50">
-                    <SelectItem value="gemini-2.5-flash">Gemini 2.5 Flash (Recomendado - Rápido)</SelectItem>
-                    <SelectItem value="gemini-2.0-flash">Gemini 2.0 Flash</SelectItem>
-                    <SelectItem value="gemini-1.5-flash">Gemini 1.5 Flash</SelectItem>
-                  </SelectContent>
-                </Select>
               </div>
             </div>
-
-            {/* Preferências do Chat */}
-            <div className="flex flex-col gap-2.5 border-t border-zinc-800 pt-4">
-              <h3 className="text-xs font-semibold text-zinc-300 uppercase tracking-wider">
-                Preferências do Chat
-              </h3>
-              <div className="flex items-center justify-between mt-1 p-2.5 bg-zinc-900/40 border border-zinc-800/80 rounded-md">
-                <div className="flex flex-col gap-1 pr-4">
-                  <label className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">
-                    Enviar mensagem com Enter
-                  </label>
-                  <span className="text-[9.5px] text-zinc-500 leading-relaxed -mt-0.5">
-                    Se desativado, pressionar Enter irá quebrar a linha no telemóvel e computador. Use o botão de envio para submeter.
-                  </span>
-                </div>
-                <input 
-                  type="checkbox" 
-                  checked={inputSubmitOnEnter}
-                  onChange={(e) => setInputSubmitOnEnter(e.target.checked)}
-                  className="w-4.5 h-4.5 rounded border-zinc-800 bg-zinc-950 focus:ring-zinc-500 accent-zinc-100 cursor-pointer flex-shrink-0"
-                />
-              </div>
-            </div>
-
-            {/* Gestão de Dados */}
-            <div className="flex flex-col gap-2.5 border-t border-zinc-800 pt-4">
-              <h3 className="text-xs font-semibold text-zinc-300 uppercase tracking-wider">
-                Gestão de Dados Locais
-              </h3>
-              <p className="text-[10.5px] text-zinc-400 leading-relaxed -mt-1">
-                Importe ou exporte backups do seu estado financeiro ou reinicie os dados locais.
-              </p>
-              
-              <div className="flex flex-wrap gap-2 mt-1">
-                <Button 
-                  onClick={handleExportData} 
-                  variant="outline" 
-                  size="sm" 
-                  className="bg-zinc-900 border-zinc-800 hover:bg-zinc-800 text-xs rounded flex items-center gap-1.5 text-zinc-300 hover:text-zinc-100"
-                >
-                  <Download className="w-3.5 h-3.5" /> Exportar JSON
-                </Button>
-
-                <Button 
-                  onClick={() => importFileRef.current?.click()} 
-                  variant="outline" 
-                  size="sm" 
-                  className="bg-zinc-900 border-zinc-800 hover:bg-zinc-800 text-xs rounded flex items-center gap-1.5 text-zinc-300 hover:text-zinc-100"
-                >
-                  <Upload className="w-3.5 h-3.5" /> Importar JSON
-                </Button>
-                <input 
-                  type="file" 
-                  ref={importFileRef} 
-                  onChange={handleImportData} 
-                  accept=".json" 
-                  className="hidden" 
-                />
-
-                <Button 
-                  onClick={handleClearChatHistory}
-                  variant="outline"
-                  size="sm"
-                  className="bg-zinc-900 border-zinc-800 hover:bg-zinc-800 text-xs rounded flex items-center gap-1.5 text-zinc-300 hover:text-zinc-100"
-                >
-                  Limpar Chat
-                </Button>
-
-                <Button 
-                  onClick={handleClearAllData} 
-                  variant="destructive" 
-                  size="sm" 
-                  className="text-xs rounded flex items-center gap-1.5 bg-red-950/20 hover:bg-red-900 border border-red-900 text-red-400 hover:text-white"
-                >
-                  <Trash2 className="w-3.5 h-3.5" /> Apagar Tudo
-                </Button>
-              </div>
-            </div>
-          </div>
+          </ScrollArea>
 
           <DialogFooter className="border-t border-zinc-800 pt-4">
             <Button onClick={() => setIsSettingsOpen(false)} variant="ghost" className="text-xs text-zinc-400 hover:bg-zinc-800">
