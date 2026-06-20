@@ -1645,7 +1645,7 @@ Mantenha as respostas curtas e muito amigáveis.`;
             </DialogDescription>
           </DialogHeader>
 
-          <ScrollArea className="flex-1 pr-3">
+          <ScrollArea className="flex-1 min-h-0 max-h-[50vh] md:max-h-[60vh] pr-3">
             <div className="flex flex-col gap-5 py-2">
               {/* Gemini Config */}
               <div className="flex flex-col gap-2.5">
