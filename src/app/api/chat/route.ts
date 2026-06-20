@@ -101,7 +101,8 @@ const SYSTEM_TOOLS = [
             title: { type: "STRING", description: "Título do cartão (ex: 'Otimização de Custos de Transporte')." },
             description: { type: "STRING", description: "O texto explicativo da recomendação, conselho ou alerta." },
             type: { type: "STRING", enum: ["info", "warning", "success", "critical"], description: "Estilo visual do cartão: info (azul/neutro), warning (amarelo), success (verde), critical (vermelho)." },
-            actionLabel: { type: "STRING", description: "Texto opcional para um botão de ação (ex: 'Ver Dicas', 'Verificar Limites')." }
+            actionLabel: { type: "STRING", description: "Texto opcional para um botão de ação (ex: 'Ver Dicas', 'Verificar Limites')." },
+            frequency: { type: "STRING", enum: ["daily", "weekly", "monthly", "one-time"], description: "Frequência recomendada para esta ação/estratégia (diária, semanal, mensal ou pontual)." }
           },
           required: ["id", "title", "description", "type"]
         }

@@ -23,7 +23,10 @@ import {
   Check,
   Plus,
   Search,
-  Filter
+  Filter,
+  CalendarDays,
+  ArrowDownLeft,
+  ArrowUpRight
 } from "lucide-react";
 
 import { 
@@ -33,7 +36,10 @@ import {
   XAxis, 
   YAxis, 
   Tooltip, 
-  CartesianGrid 
+  CartesianGrid,
+  BarChart,
+  Bar,
+  Legend
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -185,6 +191,8 @@ export default function Home() {
   const [txFilterCategory, setTxFilterCategory] = useState<string>("all");
   const [txFilterAccount, setTxFilterAccount] = useState<string>("all");
   const [txSearchQuery, setTxSearchQuery] = useState<string>("");
+  const [selectedMonth, setSelectedMonth] = useState<string>("all");
+  const [chartView, setChartView] = useState<"projection" | "history">("projection");
   
   // Referências
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -327,6 +335,112 @@ export default function Home() {
     }
   }
   const totalConsolidated = totalBanks + totalWallets;
+
+  // Obter lista de meses com transações (e garantir o mês atual)
+  const getMonthsList = () => {
+    const months = new Set<string>();
+    const currentYearMonth = new Date().toISOString().substring(0, 7); // "YYYY-MM"
+    months.add(currentYearMonth);
+
+    state.transactions.forEach(tx => {
+      if (tx.date) {
+        months.add(tx.date.substring(0, 7)); // "YYYY-MM"
+      }
+    });
+
+    return Array.from(months).sort().reverse();
+  };
+
+  // Formatar nome do mês em Português
+  const formatMonthName = (yearMonth: string) => {
+    if (yearMonth === "all") return "Todos os Períodos";
+    const [year, month] = yearMonth.split("-");
+    const date = new Date(parseInt(year), parseInt(month) - 1, 1);
+    const monthName = date.toLocaleString("pt-MZ", { month: "long" });
+    return `${monthName.charAt(0).toUpperCase() + monthName.slice(1)} de ${year}`;
+  };
+
+  // Calcular métricas para o período selecionado
+  const getMonthlyMetrics = () => {
+    let income = 0;
+    let expenses = 0;
+
+    state.transactions.forEach(tx => {
+      if (selectedMonth === "all" || tx.date.substring(0, 7) === selectedMonth) {
+        if (tx.type === "income") {
+          income += tx.amount;
+        } else {
+          expenses += tx.amount;
+        }
+      }
+    });
+
+    return {
+      monthlyIncome: income,
+      monthlyExpenses: expenses,
+      monthlyNet: income - expenses
+    };
+  };
+
+  const { monthlyIncome, monthlyExpenses, monthlyNet } = getMonthlyMetrics();
+
+  // Gerar dados históricos para o gráfico de barras mensal (últimos 6 meses)
+  const getHistoricalMonthlyData = () => {
+    const data = [];
+    const today = new Date();
+    
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+      const yearMonth = d.toISOString().substring(0, 7); // "YYYY-MM"
+      
+      let income = 0;
+      let expenses = 0;
+      
+      state.transactions.forEach(tx => {
+        if (tx.date.substring(0, 7) === yearMonth) {
+          if (tx.type === "income") {
+            income += tx.amount;
+          } else {
+            expenses += tx.amount;
+          }
+        }
+      });
+      
+      const label = d.toLocaleString("pt-MZ", { month: "short", year: "2-digit" });
+      data.push({
+        name: label.charAt(0).toUpperCase() + label.slice(1),
+        "Receitas": Math.round(income),
+        "Despesas": Math.round(expenses)
+      });
+    }
+    
+    return data;
+  };
+
+  // Obter crachá visual para a frequência da estratégia
+  const getFrequencyBadge = (freq?: string) => {
+    if (!freq) return null;
+    
+    let label = "Pontual";
+    let colorClass = "bg-zinc-800/40 text-zinc-400 border border-zinc-700/60";
+    
+    if (freq === "daily") {
+      label = "Diário";
+      colorClass = "bg-blue-950/30 text-blue-400 border border-blue-900/40";
+    } else if (freq === "weekly") {
+      label = "Semanal";
+      colorClass = "bg-purple-950/30 text-purple-400 border border-purple-900/40";
+    } else if (freq === "monthly") {
+      label = "Mensal";
+      colorClass = "bg-emerald-950/30 text-emerald-400 border border-emerald-900/40";
+    }
+    
+    return (
+      <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider ${colorClass}`}>
+        {label}
+      </span>
+    );
+  };
 
   // Gerar dados de projeção para o gráfico Recharts (180 dias)
   const getProjectionData = () => {
@@ -494,6 +608,12 @@ export default function Home() {
   const getFilteredTransactions = () => {
     return [...state.transactions]
       .filter((tx) => {
+        // Filtrar por Mês Selecionado (caso não seja "all")
+        if (selectedMonth !== "all") {
+          const txYearMonth = tx.date.substring(0, 7);
+          if (txYearMonth !== selectedMonth) return false;
+        }
+
         if (txFilterType === "income" && tx.type !== "income") return false;
         if (txFilterType === "expense" && tx.type !== "expense") return false;
         if (txFilterType === "recurring" && !tx.isRecurring) return false;
@@ -668,23 +788,24 @@ ${text}`;
 
   // Chamar Rota de API
   const callChatAPI = async (history: ChatMessage[], currentState: AppState) => {
-    const systemInstruction = `Você é o Kuhula AI, um assistente e conselheiro financeiro pessoal empático, objetivo e pragmático de Moçambique.
-Sua prioridade absoluta é compreender a vida financeira do usuário e ajudá-lo a organizar suas finanças de forma gradual e consciente, indo direto ao ponto.
+    const systemInstruction = `Você é o Kuhula AI, um assistente e conselheiro financeiro pessoal técnico, estratégico e altamente objetivo de Moçambique.
+Sua prioridade absoluta é ajudar o usuário a organizar suas finanças de forma detalhada e consciente, focando de forma precisa em responder às suas dúvidas e comandos sem rodeios ou conversação excessiva.
 
 DIRETRIZES DE COMPORTAMENTO:
-1. OBJETIVIDADE E PRAGMATISMO: Seja curto, direto e prático em suas respostas. Evite textos longos, explicações longas ou rodeios. Vá direto ao ponto, sugerindo soluções concretas. Limite suas mensagens a no máximo 2 ou 3 parágrafos curtos ou poucos tópicos claros.
-2. DIÁLOGO E EMPATIA: Ouça o usuário. Demonstre interesse genuíno pelas suas dificuldades (como dívidas, falta de dinheiro para Credelec, custos de transporte/chapa), mas de forma breve.
-3. USO MODERADO DAS FERRAMENTAS: Não chame ferramentas (Function Calling) por impulso a cada menção a um valor. Primeiro, converse de forma direta, valide a situação e sugira ações. Só use as ferramentas de transação, saldo, estratégia ou meta após uma conclusão natural da conversa ou quando o usuário aceitar ou pedir explicitamente para lançar a informação no painel.
-4. CONSELHOS PERSONALIZADOS: Apresente as metodologias financeiras como opções amigáveis e debata com o usuário qual se adapta melhor ao seu estilo de vida antes de aplicá-la.
+1. FOCO NA PERGUNTA E PRECISÃO: Se o usuário fizer uma pergunta ou comando, concentre-se em respondê-lo de forma direta, precisa e técnica. Evite rodeios ou introduções desnecessárias. Pense no panorama geral apenas quando for estritamente necessário para contextualizar a resposta ou quando solicitado pelo usuário.
+2. OBJETIVIDADE E PRAGMATISMO: Não seja excessivamente conversador. Seja direto, prático e sucinto. Limite suas mensagens a no máximo 2 ou 3 parágrafos curtos ou listas claras de tópicos estratégicos.
+3. ESTRATÉGIAS E PERIODICIDADE: Pense no planejamento financeiro de forma organizada em ações com diferentes frequências: diárias, semanais e mensais.
+   - Ao chamar a ferramenta 'createOrUpdateStrategy', você DEVE especificar o parâmetro 'frequency' ('daily' para tarefas diárias, 'weekly' para semanais, 'monthly' para mensais, 'one-time' para dicas pontuais) para classificar as ações recomendadas no painel.
+4. USO MODERADO DAS FERRAMENTAS: Use as ferramentas de transação, saldo, estratégia ou meta apenas após acordar a ação ou quando o usuário aceitar ou pedir explicitamente para lançar a informação no painel.
 
 METODOLOGIAS FINANCEIRAS:
-Você conhece metodologias de finanças populares (como a Regra 50/30/20, o Método dos Envelopes, Pague-se a Si Próprio Primeiro, Bola de Neve para dívidas).
+Você domina metodologias de finanças (como a Regra 50/30/20, o Método dos Envelopes, Pague-se a Si Próprio Primeiro, Bola de Neve para dívidas).
 Se o usuário concordar em adotar um método no chat ou pedir conselhos:
 1. Recomende o método no chat de forma simples, concisa e pragmática.
 2. Aplique-o VISUALMENTE no painel do usuário usando as ferramentas quando acordado:
-   - Use 'createOrUpdateStrategy' para criar cartões explicando a estratégia adotada (ex: um cartão 'Regra 50/30/20: Plano de Ação').
-   - Use 'setBudgetLimit' para configurar limites de orçamento alinhados com o método (ex: 30% do rendimento mensal para Lazer).
-   - Use 'adjustAccountBalance' para criar 'envelopes' virtuais se o usuário adotar o Método dos Envelopes (ex: criar conta 'Envelope Alimentação').
+   - Use 'createOrUpdateStrategy' (configurando 'frequency') para criar cartões explicando a estratégia adotada.
+   - Use 'setBudgetLimit' para configurar limites de orçamento alinhados com o método.
+   - Use 'adjustAccountBalance' para criar 'envelopes' virtuais se o usuário adotar o Método dos Envelopes.
    - Use 'createOrUpdateGoal' para configurar as poupanças recomendadas.
 
 DETALHES DE MOÇAMBIQUE:
@@ -702,7 +823,7 @@ ${JSON.stringify({
     recentTransactions: currentState.transactions.slice(-12)
 }, null, 2)}
 
-Mantenha as suas respostas amigáveis, empáticas, curtas, objetivas, pragmáticas e em português de Moçambique.`;
+Mantenha as suas respostas altamente técnicas, estratégicas, curtas, objetivas e em português de Moçambique.`;
 
     // Filtrar histórico para enviar apenas mensagens com papéis válidos para a API do Gemini (user e model)
     const validHistory = history.filter(msg => msg.role === "user" || msg.role === "model");
@@ -912,7 +1033,8 @@ Mantenha as suas respostas amigáveis, empáticas, curtas, objetivas, pragmátic
             title: args.title,
             description: args.description,
             type: args.type || "info",
-            actionLabel: args.actionLabel
+            actionLabel: args.actionLabel,
+            frequency: args.frequency
           };
 
           if (idx > -1) {
@@ -972,6 +1094,58 @@ Mantenha as suas respostas amigáveis, empáticas, curtas, objetivas, pragmátic
         </div>
       </div>
 
+        {/* Seletor de Período e Métricas do Mês */}
+        <Card className="bg-zinc-900 border-zinc-800 rounded-lg shadow-sm">
+          <CardHeader className="pb-3 pt-4 px-4 flex flex-row items-center justify-between border-b border-zinc-800/60">
+            <CardTitle className="font-heading text-xs font-semibold flex items-center gap-2 text-zinc-100 uppercase tracking-wider">
+              <CalendarDays className="w-3.5 h-3.5 text-zinc-400" /> Análise Mensal & Histórico
+            </CardTitle>
+            <Select value={selectedMonth} onValueChange={(val) => setSelectedMonth(val || "all")}>
+              <SelectTrigger className="bg-zinc-950 border-zinc-800 text-[11px] h-8 rounded text-zinc-100 w-[170px] hover:bg-zinc-900 transition-colors">
+                <SelectValue placeholder="Selecione o período" />
+              </SelectTrigger>
+              <SelectContent className="bg-zinc-950 border border-zinc-800 text-zinc-100">
+                <SelectItem value="all">Todos os Períodos</SelectItem>
+                {getMonthsList().map((m) => (
+                  <SelectItem key={m} value={m}>
+                    {formatMonthName(m)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </CardHeader>
+          <CardContent className="p-4">
+            <div className="grid grid-cols-3 gap-3">
+              <div className="bg-zinc-950/40 border border-zinc-800/50 p-3 rounded-lg flex flex-col">
+                <span className="text-[9px] text-zinc-500 font-semibold uppercase tracking-wider flex items-center gap-1">
+                  <ArrowDownLeft className="w-3.5 h-3.5 text-emerald-400" /> Receitas
+                </span>
+                <span className="font-heading text-xs md:text-sm font-bold text-emerald-400 mt-1 truncate">
+                  {formatCurrency(monthlyIncome)}
+                </span>
+              </div>
+
+              <div className="bg-zinc-950/40 border border-zinc-800/50 p-3 rounded-lg flex flex-col">
+                <span className="text-[9px] text-zinc-500 font-semibold uppercase tracking-wider flex items-center gap-1">
+                  <ArrowUpRight className="w-3.5 h-3.5 text-rose-400" /> Despesas
+                </span>
+                <span className="font-heading text-xs md:text-sm font-bold text-rose-400 mt-1 truncate">
+                  {formatCurrency(monthlyExpenses)}
+                </span>
+              </div>
+
+              <div className="bg-zinc-950/40 border border-zinc-800/50 p-3 rounded-lg flex flex-col">
+                <span className="text-[9px] text-zinc-500 font-semibold uppercase tracking-wider">
+                  Balanço Líquido
+                </span>
+                <span className={`font-heading text-xs md:text-sm font-bold mt-1 truncate ${monthlyNet >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                  {monthlyNet >= 0 ? "+" : ""}{formatCurrency(monthlyNet)}
+                </span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Estratégias Recomendadas pela IA */}
         {state.strategies && state.strategies.length > 0 && (
           <div className="flex flex-col gap-3">
@@ -996,9 +1170,12 @@ Mantenha as suas respostas amigáveis, empáticas, curtas, objetivas, pragmátic
                     className={`p-3.5 rounded-lg border flex flex-col justify-between gap-3 ${borderClass}`}
                   >
                     <div>
-                      <h4 className="text-xs font-bold text-zinc-100 flex items-center justify-between">
-                        {strat.title}
-                        <span className={`w-1.5 h-1.5 rounded-full ${
+                      <h4 className="text-xs font-bold text-zinc-100 flex items-center justify-between gap-2">
+                        <span className="flex items-center gap-1.5 truncate">
+                          {strat.title}
+                          {getFrequencyBadge(strat.frequency)}
+                        </span>
+                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
                           isWarning ? "bg-amber-400" :
                           isSuccess ? "bg-emerald-400" :
                           isCritical ? "bg-rose-400" : "bg-zinc-400"
@@ -1024,43 +1201,93 @@ Mantenha as suas respostas amigáveis, empáticas, curtas, objetivas, pragmátic
           </div>
         )}
 
-      {/* Card do Gráfico de Previsões */}
+      {/* Card do Gráfico */}
       <Card className="bg-zinc-900 border-zinc-800 rounded-lg shadow-sm">
-        <CardHeader className="pb-1 pt-4">
+        <CardHeader className="pb-1 pt-4 flex flex-row items-center justify-between">
           <CardTitle className="font-heading text-xs font-semibold flex items-center gap-2 text-zinc-100 uppercase tracking-wider">
-            <ChevronRight className="w-3.5 h-3.5 text-zinc-400" /> Previsibilidade de Caixa (Próximos 180 dias)
+            <ChevronRight className="w-3.5 h-3.5 text-zinc-400" /> 
+            {chartView === "projection" ? "Previsibilidade de Caixa (Próximos 180 dias)" : "Histórico de Fluxo Mensal (Últimos 6 Meses)"}
           </CardTitle>
+          <div className="flex bg-zinc-950 p-0.5 rounded border border-zinc-800">
+            <button
+              onClick={() => setChartView("projection")}
+              className={`px-2.5 py-1 text-[9px] font-bold rounded uppercase tracking-wider transition-all ${
+                chartView === "projection"
+                  ? "bg-zinc-800 text-zinc-100"
+                  : "text-zinc-500 hover:text-zinc-300"
+              }`}
+            >
+              Previsão
+            </button>
+            <button
+              onClick={() => setChartView("history")}
+              className={`px-2.5 py-1 text-[9px] font-bold rounded uppercase tracking-wider transition-all ${
+                chartView === "history"
+                  ? "bg-zinc-800 text-zinc-100"
+                  : "text-zinc-500 hover:text-zinc-300"
+              }`}
+            >
+              Histórico
+            </button>
+          </div>
         </CardHeader>
         <CardContent className="h-[190px] pt-2 pr-2 pb-2">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={getProjectionData()}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" />
-              <XAxis 
-                dataKey="name" 
-                stroke="#52525b" 
-                fontSize={9} 
-                tickLine={false} 
-              />
-              <YAxis 
-                stroke="#52525b" 
-                fontSize={9} 
-                tickLine={false}
-                tickFormatter={(val) => val >= 1000 ? `${(val / 1000).toFixed(0)}k` : val} 
-              />
-              <Tooltip 
-                contentStyle={{ backgroundColor: "#09090b", border: "1px solid #27272a", borderRadius: "6px" }}
-                itemStyle={{ color: "#fafafa", fontSize: "11px", fontFamily: "Inter" }}
-                labelStyle={{ color: "#a1a1aa", fontWeight: "bold", fontSize: "10px", fontFamily: "Outfit" }}
-                formatter={(val) => [`${Number(val).toLocaleString()} MT`, "Saldo"]}
-              />
-              <Area 
-                type="monotone" 
-                dataKey="Saldo Projetado" 
-                stroke="#fafafa" 
-                strokeWidth={1.5}
-                fill="none" 
-              />
-            </AreaChart>
+            {chartView === "projection" ? (
+              <AreaChart data={getProjectionData()}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" />
+                <XAxis 
+                  dataKey="name" 
+                  stroke="#52525b" 
+                  fontSize={9} 
+                  tickLine={false} 
+                />
+                <YAxis 
+                  stroke="#52525b" 
+                  fontSize={9} 
+                  tickLine={false}
+                  tickFormatter={(val) => val >= 1000 ? `${(val / 1000).toFixed(0)}k` : val} 
+                />
+                <Tooltip 
+                  contentStyle={{ backgroundColor: "#09090b", border: "1px solid #27272a", borderRadius: "6px" }}
+                  itemStyle={{ color: "#fafafa", fontSize: "11px", fontFamily: "Inter" }}
+                  labelStyle={{ color: "#a1a1aa", fontWeight: "bold", fontSize: "10px", fontFamily: "Outfit" }}
+                  formatter={(val) => [`${Number(val).toLocaleString()} MT`, "Saldo"]}
+                />
+                <Area 
+                  type="monotone" 
+                  dataKey="Saldo Projetado" 
+                  stroke="#fafafa" 
+                  strokeWidth={1.5}
+                  fill="none" 
+                />
+              </AreaChart>
+            ) : (
+              <BarChart data={getHistoricalMonthlyData()} margin={{ top: 10, right: 10, left: -15, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" />
+                <XAxis 
+                  dataKey="name" 
+                  stroke="#52525b" 
+                  fontSize={9} 
+                  tickLine={false} 
+                />
+                <YAxis 
+                  stroke="#52525b" 
+                  fontSize={9} 
+                  tickLine={false}
+                  tickFormatter={(val) => val >= 1000 ? `${(val / 1000).toFixed(0)}k` : val} 
+                />
+                <Tooltip 
+                  contentStyle={{ backgroundColor: "#09090b", border: "1px solid #27272a", borderRadius: "6px" }}
+                  itemStyle={{ fontSize: "11px", fontFamily: "Inter" }}
+                  labelStyle={{ color: "#a1a1aa", fontWeight: "bold", fontSize: "10px", fontFamily: "Outfit" }}
+                  formatter={(val, name) => [`${Number(val).toLocaleString()} MT`, name]}
+                />
+                <Legend verticalAlign="top" height={24} iconSize={8} wrapperStyle={{ fontSize: '9px', fontFamily: 'Inter', textTransform: 'uppercase', letterSpacing: '0.05em' }} />
+                <Bar dataKey="Receitas" fill="#10b981" radius={[4, 4, 0, 0]} maxBarSize={24} />
+                <Bar dataKey="Despesas" fill="#ef4444" radius={[4, 4, 0, 0]} maxBarSize={24} />
+              </BarChart>
+            )}
           </ResponsiveContainer>
         </CardContent>
       </Card>

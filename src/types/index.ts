@@ -25,6 +25,7 @@ export interface FinancialStrategy {
   description: string;
   type: 'info' | 'warning' | 'success' | 'critical';
   actionLabel?: string;
+  frequency?: 'daily' | 'weekly' | 'monthly' | 'one-time';
 }
 
 export interface AppState {
