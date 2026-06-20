@@ -675,13 +675,16 @@ ${JSON.stringify({
 
 Mantenha as respostas curtas e muito amigáveis.`;
 
+    // Filtrar histórico para enviar apenas mensagens com papéis válidos para a API do Gemini (user e model)
+    const validHistory = history.filter(msg => msg.role === "user" || msg.role === "model");
+
     const res = await fetch("/api/chat", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        history,
+        history: validHistory,
         systemInstruction,
         model,
         clientApiKey
