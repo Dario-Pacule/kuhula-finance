@@ -1,92 +1,192 @@
-# 🧠 Kuhula Finance — Gerenciador Financeiro Inteligente
+# Kuhula Finance
 
-O **Kuhula Finance** é uma aplicação moderna de finanças pessoais que combina design premium (zinc dark mode), alta responsividade e inteligência artificial para ajudar indivíduos e famílias a organizarem as suas vidas financeiras. 
-
-Construído com **Next.js**, **Tailwind CSS v4** e **Shadcn UI**, o Kuhula Finance integra o modelo **Gemini AI** para atuar como um assistente financeiro autónomo, capaz de sugerir estratégias de poupança, ajustar saldos e gerir contas de forma totalmente conversacional.
+Gestor financeiro pessoal com IA conversacional, construído para o contexto moçambicano. Em vez de formulários, conversas com a IA que organizam o painel automaticamente.
 
 ---
 
-## 🚀 Funcionalidades Principais
+## Stack
 
-* **💰 Dashboard Consolidado**: Veja o saldo global unificado e a separação automática entre contas bancárias tradicionais e carteiras móveis populares (como M-Pesa, e-Mola ou mKesh).
-* **🤖 Kuhula AI (Orquestração de Inteligência Artificial)**: Um chat integrado com capacidade de executar comandos diretamente no seu painel através de *Function Calling*. A IA pode:
-  * Criar ou excluir contas financeiras.
-  * Injetar cartões de conselhos e alertas visuais de risco diretamente no seu dashboard (com níveis: *info*, *sucesso*, *aviso*, *crítico*).
-  * Recomendar e implementar metodologias financeiras famosas, como a **Regra 50/30/20** ou o **Método dos Envelopes**.
-* **📈 Previsibilidade de Caixa**: Um gráfico de área dinâmico (*Recharts*) que projeta o fluxo de caixa para os **próximos 180 dias**, tendo em conta as receitas e as despesas futuras estimadas.
-* **📂 Histórico de Transações com Filtros Avançados**:
-  * Pesquisa textual de transações por descrição, categoria ou conta.
-  * Filtros rápidos por Tipo (Receitas, Despesas, Recorrentes), Categorias dinâmicas e Contas específicas.
-  * **Design Móvel Flexível**: Barra de filtros e listagens adaptam-se automaticamente de forma fluida a ecrãs de telemóveis usando *Container Queries* do Tailwind CSS.
-* **🛡️ Persistência Híbrida Inteligente**: 
-  * Funciona localmente via `localStorage` sem qualquer configuração necessária.
-  * Sincroniza e persiste automaticamente numa base de dados na nuvem (**MongoDB Atlas**) se a variável correspondente for detetada.
+| Camada | Tecnologia |
+|---|---|
+| Framework | Next.js 16 (App Router) |
+| UI | Tailwind CSS v4 + Shadcn UI |
+| Gráficos | Recharts |
+| Base de Dados | Supabase (PostgreSQL) |
+| IA | Gemini, OpenAI, Anthropic, Groq, OpenRouter |
 
 ---
 
-## 🛠️ Tecnologias Utilizadas
+## Pré-requisitos
 
-* **Framework**: [Next.js](https://nextjs.org/) (App Router, Turbopack)
-* **Estilização**: [Tailwind CSS](https://tailwindcss.com/)
-* **Componentes UI**: [Shadcn UI](https://ui.shadcn.com/) (Radix Primitives)
-* **Gráficos**: [Recharts](https://recharts.org/)
-* **Ícones**: [Lucide React](https://lucide.dev/)
-* **Inteligência Artificial**: [Google Gemini API](https://ai.google.dev/)
-* **Base de Dados**: [MongoDB](https://www.mongodb.com/) (com Mongoose)
+- Node.js 18+
+- Conta [Supabase](https://supabase.com) (plano gratuito chega)
+- Chave de API de pelo menos um provider de IA (ver secção abaixo)
 
 ---
 
-## 💻 Instalação e Execução Local
-
-### Pré-requisitos
-* Node.js (v18.0.0 ou superior)
-* npm, yarn, pnpm ou bun
+## Instalação
 
 ### 1. Clonar o repositório
+
 ```bash
 git clone https://github.com/Dario-Pacule/kuhula-finance.git
 cd kuhula-finance
-```
-
-### 2. Instalar as dependências
-```bash
 npm install
 ```
 
-### 3. Configurar as Variáveis de Ambiente (Opcional para modo Nuvem)
-Crie um ficheiro `.env.local` na raiz do projeto:
-```env
-MONGODB_URI=mongodb+srv://<usuario>:<senha>@cluster0.xxxx.mongodb.net/kuhula?retryWrites=true&w=majority
-GEMINI_API_KEY=sua_chave_api_do_gemini
-```
-> *Nota: Se não fornecer a `MONGODB_URI`, a aplicação funcionará em modo offline guardando todas as transações de forma segura no próprio navegador do utilizador.*
+### 2. Configurar o Supabase
 
-### 4. Executar o servidor de desenvolvimento
+**2.1 — Criar o projecto**
+
+1. Vai a [supabase.com](https://supabase.com) → New project
+2. Escolhe uma região próxima (ex: `eu-west-1`)
+3. Guarda a password do projecto em local seguro
+
+**2.2 — Criar as tabelas**
+
+1. No painel Supabase, vai a **SQL Editor**
+2. Cola o conteúdo do ficheiro `supabase/schema.sql`
+3. Clica **Run**
+
+Isto cria todas as tabelas, índices, Row Level Security e triggers automaticamente.
+
+**2.3 — Copiar as chaves**
+
+Vai a **Settings → API** e copia:
+
+| Variável | Onde encontrar |
+|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | Project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | `anon` `public` |
+| `SUPABASE_SERVICE_ROLE_KEY` | `service_role` (nunca expor no browser) |
+
+### 3. Configurar variáveis de ambiente
+
+```bash
+cp .env.example .env.local
+```
+
+Abre `.env.local` e preenche os valores do Supabase:
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://xxxxxxxxxxxx.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6...
+SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6...
+```
+
+As chaves de IA são opcionais no servidor — o utilizador pode configurá-las directamente na app. Mas se quiseres definir um provider padrão para todos:
+
+```env
+# Pelo menos um dos seguintes
+GEMINI_API_KEY=AIza...
+OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=sk-ant-...
+GROQ_API_KEY=gsk_...
+OPENROUTER_API_KEY=sk-or-...
+```
+
+### 4. Arrancar o servidor de desenvolvimento
+
 ```bash
 npm run dev
 ```
-Abra o seu navegador em [http://localhost:3000](http://localhost:3000) para ver a aplicação em funcionamento.
+
+Abre [http://localhost:3000](http://localhost:3000).
 
 ---
 
-## ⚙️ Implantação (Deploy) na Vercel + MongoDB Atlas
+## Configurar o provider de IA na app
 
-Para colocar o Kuhula Finance online com sincronização em tempo real entre todos os seus dispositivos, siga os passos abaixo:
+Na app, clica no ícone ⚙️ (configurações) e escolhe:
 
-### Passo 1: Configurar a Base de Dados
-1. Crie uma conta gratuita no [MongoDB Atlas](https://www.mongodb.com/cloud/atlas) e inicialize um cluster partilhado gratuito (M0).
-2. Em **Network Access**, adicione a regra para aceitar ligações de qualquer IP (`0.0.0.0/0`) pois a Vercel usa IPs dinâmicos.
-3. Crie um utilizador em **Database Access** e copie a sua *Connection String* do driver de Node.js.
+| Provider | Modelos gratuitos | Onde obter a chave |
+|---|---|---|
+| **Google Gemini** | Gemini 2.5 Flash, 2.0 Flash | [aistudio.google.com](https://aistudio.google.com) |
+| **Groq** | LLaMA 3.3 70B, Mixtral | [console.groq.com](https://console.groq.com) |
+| **OpenRouter** | LLaMA 3.3 70B, Gemini 2.0 Flash, Mistral 7B | [openrouter.ai/keys](https://openrouter.ai/keys) |
+| OpenAI | — | [platform.openai.com](https://platform.openai.com/api-keys) |
+| Anthropic | — | [console.anthropic.com](https://console.anthropic.com) |
 
-### Passo 2: Publicar no Vercel
-1. Instale a CLI do Vercel (`npm install -g vercel`) ou ligue diretamente o seu repositório do GitHub à plataforma da Vercel.
-2. Nas definições do projeto na Vercel, aceda a **Settings** -> **Environment Variables** e registe as variáveis:
-   * `MONGODB_URI` (String de ligação do Atlas)
-   * `GEMINI_API_KEY` (Chave de desenvolvimento do Gemini)
-3. Promova uma nova compilação (*Redeploy*) na Vercel. A aplicação passará a salvar e recuperar os seus dados do MongoDB Atlas de forma automática!
+> **Recomendado para começar sem custo:** Groq com LLaMA 3.3 70B ou Google Gemini 2.5 Flash.
+
+A chave é guardada localmente no dispositivo (nunca enviada para os nossos servidores).
 
 ---
 
-## 📄 Licença
+## Deploy na Vercel
 
-Este projeto está licenciado sob a licença MIT. Consulte o ficheiro [LICENSE](LICENSE) para obter mais informações.
+### 1. Ligar o repositório
+
+1. Vai a [vercel.com](https://vercel.com) → New Project
+2. Importa o repositório do GitHub
+3. Framework preset: **Next.js** (detectado automaticamente)
+
+### 2. Configurar variáveis de ambiente
+
+Em **Settings → Environment Variables**, adiciona as mesmas variáveis do `.env.local`:
+
+```
+NEXT_PUBLIC_SUPABASE_URL
+NEXT_PUBLIC_SUPABASE_ANON_KEY
+SUPABASE_SERVICE_ROLE_KEY
+```
+
+E as chaves de IA que quiseres disponibilizar como padrão (opcional).
+
+### 3. Deploy
+
+Clica **Deploy**. A Vercel detecta Next.js automaticamente e faz o build.
+
+---
+
+## Estrutura do projecto
+
+```
+kuhula-finance/
+├── supabase/
+│   └── schema.sql          # Schema completo — corre no SQL Editor do Supabase
+├── src/
+│   ├── app/
+│   │   ├── api/
+│   │   │   ├── chat/
+│   │   │   │   └── route.ts        # API unificada multi-provider de IA
+│   │   │   ├── state/
+│   │   │   │   └── route.ts        # CRUD atómico do estado financeiro
+│   │   │   └── chat-history/
+│   │   │       └── route.ts        # Histórico de conversa
+│   │   └── page.tsx                # Componente principal
+│   ├── hooks/
+│   │   └── usePersistence.ts       # Hook de sincronização DB + localStorage
+│   ├── lib/
+│   │   ├── supabase.ts             # Cliente Supabase (browser + servidor)
+│   │   ├── db.ts                   # Camada de acesso a dados
+│   │   └── ai-providers.ts         # Configuração dos providers de IA
+│   └── types/
+│       └── index.ts                # Tipos TypeScript
+├── docs/
+│   └── migration-mongodb-to-supabase.md
+└── .env.example
+```
+
+---
+
+## Branches activas
+
+| Branch | Descrição |
+|---|---|
+| `main` | Versão estável |
+| `improve/ai-conversation` | System prompt melhorado, memória de sessão, histórico ampliado |
+| `improve/supabase-persistence` | Migração para Supabase + multi-provider de IA |
+
+Para usar todas as melhorias, faz merge das branches por esta ordem:
+```bash
+git checkout main
+git merge improve/ai-conversation
+git merge improve/supabase-persistence
+```
+
+---
+
+## Licença
+
+MIT

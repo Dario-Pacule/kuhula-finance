@@ -65,6 +65,8 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AppState, Goal, ChatMessage } from "@/types";
+import { usePersistence, type PersistAction } from "@/hooks/usePersistence";
+import { AI_PROVIDERS, getDefaultModel, type ProviderId } from "@/lib/ai-providers";
 
 const DEFAULT_STATE: AppState = {
   accounts: {
@@ -155,15 +157,16 @@ export default function Home() {
   // Estado Financeiro
   const [state, setState] = useState<AppState>(DEFAULT_STATE);
   
-  // Estado Gemini API e Configurações
+  // Estado IA — multi-provider
+  const [provider, setProvider] = useState<ProviderId>("gemini");
+  const [model, setModel] = useState<string>("gemini-2.5-flash");
   const [clientApiKey, setClientApiKey] = useState<string>("");
   const [showApiKey, setShowApiKey] = useState<boolean>(false);
-  const [model, setModel] = useState<string>("gemini-2.5-flash");
-  
-  // Diálogos e UI
-  const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
-  const [inputApiKey, setInputApiKey] = useState<string>("");
+
+  // Inputs temporários do modal de configurações
+  const [inputProvider, setInputProvider] = useState<ProviderId>("gemini");
   const [inputModel, setInputModel] = useState<string>("gemini-2.5-flash");
+  const [inputApiKey, setInputApiKey] = useState<string>("");
   const [submitOnEnter, setSubmitOnEnter] = useState<boolean>(true);
   const [inputSubmitOnEnter, setInputSubmitOnEnter] = useState<boolean>(true);
   
@@ -172,6 +175,17 @@ export default function Home() {
   const [inputValue, setInputValue] = useState<string>("");
   const [isTyping, setIsTyping] = useState<boolean>(false);
   const [isChatCollapsed, setIsChatCollapsed] = useState<boolean>(false);
+
+  // Memória de sessão: regista o que foi mencionado na conversa mas ainda não registado no painel
+  const sessionMemoryRef = useRef<{
+    mentionedIncomes: Array<{ amount: number; source: string; account?: string }>;
+    mentionedExpenses: Array<{ amount: number; description: string; account?: string }>;
+    contextNotes: string[];
+  }>({
+    mentionedIncomes: [],
+    mentionedExpenses: [],
+    contextNotes: [],
+  });
   
   const [activeTab, setActiveTab] = useState<"dashboard" | "chat" | "metrics">("dashboard");
   const [tokenStats, setTokenStats] = useState({
@@ -204,70 +218,48 @@ export default function Home() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const importFileRef = useRef<HTMLInputElement>(null);
 
+  // Diálogos
+  const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
+
+  // Hook de persistência (Supabase + localStorage fallback)
+  const { persistAction, persistChatMessages, clearRemoteData } = usePersistence({
+    onStateLoaded: (loadedState) => setState(loadedState),
+  });
+
   // Inicialização (Client-side)
   useEffect(() => {
-    // Carregar dados locais de imediato (fallback rápido)
-    const savedState = localStorage.getItem("kuhula_state_next");
-    if (savedState) {
-      try {
-        setState(JSON.parse(savedState));
-      } catch (e) {
-        console.error("Erro ao ler estado do localStorage", e);
-      }
-    }
+    // Estado financeiro — gerido pelo usePersistence hook (já carrega automaticamente)
 
-    // Tentar carregar da base de dados remota
-    const fetchRemoteState = async () => {
-      try {
-        const res = await fetch("/api/state");
-        if (res.status === 200) {
-          const data = await res.json();
-          if (data.state) {
-            setState(data.state);
-            localStorage.setItem("kuhula_state_next", JSON.stringify(data.state));
-          }
-        }
-      } catch (err) {
-        console.warn("Base de dados remota indisponível, usando localStorage como fallback.", err);
-      }
-    };
-    fetchRemoteState();
-
-    const savedKey = localStorage.getItem("kuhula_gemini_key_next") || "";
+    // Configurações de IA
+    const savedProvider = (localStorage.getItem("kuhula_provider") || "gemini") as ProviderId;
+    const savedModel = localStorage.getItem("kuhula_model") || getDefaultModel(savedProvider);
+    const savedKey = localStorage.getItem(`kuhula_key_${savedProvider}`) || "";
+    setProvider(savedProvider);
+    setModel(savedModel);
     setClientApiKey(savedKey);
+    setInputProvider(savedProvider);
+    setInputModel(savedModel);
     setInputApiKey(savedKey);
 
-    const savedModel = localStorage.getItem("kuhula_gemini_model_next") || "gemini-2.5-flash";
-    setModel(savedModel);
-    setInputModel(savedModel);
-
-    const savedSubmit = localStorage.getItem("kuhula_submit_on_enter_next");
+    const savedSubmit = localStorage.getItem("kuhula_submit_on_enter");
     const parsedSubmit = savedSubmit !== null ? savedSubmit === "true" : true;
     setSubmitOnEnter(parsedSubmit);
     setInputSubmitOnEnter(parsedSubmit);
 
-    const savedHistory = localStorage.getItem("kuhula_chat_history_next");
+    // Histórico de chat (localStorage como cache rápido)
+    const savedHistory = localStorage.getItem("kuhula_chat_history");
     if (savedHistory) {
-      try {
-        setMessages(JSON.parse(savedHistory));
-      } catch (e) {
-        console.error("Erro ao ler histórico de chat", e);
-      }
+      try { setMessages(JSON.parse(savedHistory)); } catch {}
     }
 
+    // Estatísticas de tokens
     const savedTokenStats = localStorage.getItem("kuhula_token_stats");
     if (savedTokenStats) {
-      try {
-        setTokenStats(JSON.parse(savedTokenStats));
-      } catch (e) {
-        console.error("Erro ao ler estatísticas de tokens", e);
-      }
+      try { setTokenStats(JSON.parse(savedTokenStats)); } catch {}
     }
 
-    // Detector de tamanho de tela para responsividade móvel
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 1024);
-    };
+    // Responsividade móvel
+    const checkMobile = () => setIsMobile(window.innerWidth < 1024);
     checkMobile();
     window.addEventListener("resize", checkMobile);
     return () => window.removeEventListener("resize", checkMobile);
@@ -294,30 +286,24 @@ export default function Home() {
     }
   }, [messages, isTyping, isChatCollapsed, activeTab]);
 
-  // Persistir Estado Financeiro
-  const saveState = async (newState: AppState) => {
-    // Salvar localmente para rapidez e fallback offline
+  // Persistir Estado Financeiro — actualiza React state + localStorage
+  // A persistência na DB é feita atomicamente por executeToolAction via persistAction
+  const saveState = (newState: AppState) => {
     setState(newState);
-    localStorage.setItem("kuhula_state_next", JSON.stringify(newState));
-
-    // Salvar na base de dados remota em segundo plano
-    try {
-      await fetch("/api/state", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ state: newState })
-      });
-    } catch (err) {
-      console.warn("Falha ao salvar na base de dados remota.", err);
-    }
+    localStorage.setItem("kuhula_state_v2", JSON.stringify(newState));
   };
 
   // Persistir Histórico de Chat
   const saveChatHistory = (newHistory: ChatMessage[]) => {
+    // Filtra só mensagens text (não tool calls) para guardar na DB
+    const textMessages = newHistory
+      .filter(m => (m.role === "user" || m.role === "model") && m.parts?.[0]?.text)
+      .slice(-2) // Só as últimas 2 mensagens (novo turno)
+      .map(m => ({ role: m.role as "user" | "model", content: m.parts[0].text! }));
+
     setMessages(newHistory);
-    localStorage.setItem("kuhula_chat_history_next", JSON.stringify(newHistory));
+    localStorage.setItem("kuhula_chat_history", JSON.stringify(newHistory));
+    if (textMessages.length) persistChatMessages(textMessages);
   };
 
   // Atualizar Estatísticas de Tokens
@@ -670,26 +656,36 @@ export default function Home() {
     ...state.transactions.map(t => t.account.trim())
   ]));
 
-  // Configurar Chaves de API
+  // Configurações de IA — multi-provider
   const handleSaveSettings = () => {
-    setClientApiKey(inputApiKey);
+    setProvider(inputProvider);
     setModel(inputModel);
+    setClientApiKey(inputApiKey);
     setSubmitOnEnter(inputSubmitOnEnter);
-    localStorage.setItem("kuhula_gemini_key_next", inputApiKey);
-    localStorage.setItem("kuhula_gemini_model_next", inputModel);
-    localStorage.setItem("kuhula_submit_on_enter_next", inputSubmitOnEnter ? "true" : "false");
+    localStorage.setItem("kuhula_provider", inputProvider);
+    localStorage.setItem("kuhula_model", inputModel);
+    localStorage.setItem(`kuhula_key_${inputProvider}`, inputApiKey);
+    localStorage.setItem("kuhula_submit_on_enter", inputSubmitOnEnter ? "true" : "false");
     setIsSettingsOpen(false);
-    addSystemLog("Configurações atualizadas!");
+    addSystemLog(`Configurações actualizadas — Provider: ${inputProvider}, Modelo: ${inputModel}`);
+  };
+
+  // Quando o provider muda no modal, actualiza o modelo e a chave para os defaults desse provider
+  const handleProviderChange = (newProvider: ProviderId) => {
+    setInputProvider(newProvider);
+    setInputModel(getDefaultModel(newProvider));
+    setInputApiKey(localStorage.getItem(`kuhula_key_${newProvider}`) || "");
   };
 
   // Limpar Todos os Dados
   const handleClearAllData = () => {
-    if (confirm("ATENÇÃO: Isso apagará todas as suas transações, contas e metas financeiras permanentemente. Deseja prosseguir?")) {
+    if (confirm("ATENÇÃO: Isto apagará todas as transacções, contas e metas permanentemente. Deseja prosseguir?")) {
       const reset = { accounts: {}, transactions: [], goals: [], budgetLimits: {} };
       saveState(reset);
       saveChatHistory([]);
+      clearRemoteData();
       setIsSettingsOpen(false);
-      addSystemLog("Todos os dados locais foram reiniciados.");
+      addSystemLog("Todos os dados foram apagados.");
     }
   };
 
@@ -767,20 +763,15 @@ export default function Home() {
   const handleSendMessage = async (text: string) => {
     if (!text.trim()) return;
 
-    // Adiciona bolha de usuário na UI
-    const formattedUserMsgText = `[CONTEXTO_FINANCEIRO_ATUAL]
---- MENSAGEM DO USUÁRIO ---
-${text}`;
-
     const newHistory: ChatMessage[] = [
       ...messages,
-      { role: "user", parts: [{ text: formattedUserMsgText }] }
+      { role: "user", parts: [{ text }] }
     ];
 
-    // Atualiza chat UI
+    // Atualiza chat UI com texto limpo
     setMessages(prev => [
       ...prev,
-      { role: "user", parts: [{ text }] } // Mostra o texto limpo para o usuário
+      { role: "user", parts: [{ text }] }
     ]);
     
     setInputValue("");
@@ -789,7 +780,7 @@ ${text}`;
       setTimeout(() => {
         setMessages(prev => [
           ...prev,
-          { role: "model", parts: [{ text: "Por favor, configure a sua **Chave de API do Gemini** clicando no ícone de configurações ⚙️ acima para que eu possa ajudá-lo." }] }
+          { role: "model", parts: [{ text: `Por favor, configure a chave de API para **${provider}** nas definições ⚙️.` }] }
         ]);
       }, 600);
       return;
@@ -813,7 +804,7 @@ ${text}`;
         );
       }
 
-      await handleGeminiResponse(response, newHistory, state);
+      await handleAIResponse(response, newHistory, state);
     } catch (err: any) {
       setIsTyping(false);
       setMessages(prev => [
@@ -825,47 +816,60 @@ ${text}`;
 
   // Chamar Rota de API
   const callChatAPI = async (history: ChatMessage[], currentState: AppState) => {
-    const systemInstruction = `Você é o Kuhula AI, um assistente e conselheiro financeiro pessoal técnico, estratégico e altamente objetivo de Moçambique.
-Sua prioridade absoluta é ajudar o usuário a organizar suas finanças de forma detalhada e consciente, focando de forma precisa em responder às suas dúvidas e comandos sem rodeios ou conversação excessiva.
+    // Construir resumo compacto do estado financeiro (optimizado para tokens)
+    const totalBalance = Object.values(currentState.accounts).reduce((a, b) => a + b, 0);
+    const recentTxs = currentState.transactions.slice(-8).map(t => ({
+      desc: t.description,
+      amt: t.amount,
+      type: t.type,
+      cat: t.category,
+      acc: t.account,
+      rec: t.isRecurring
+    }));
 
-DIRETRIZES DE COMPORTAMENTO:
-1. FOCO NA PERGUNTA E PRECISÃO: Se o usuário fizer uma pergunta ou comando, concentre-se em respondê-lo de forma direta, precisa e técnica. Evite rodeios ou introduções desnecessárias. Pense no panorama geral apenas quando for estritamente necessário para contextualizar a resposta ou quando solicitado pelo usuário.
-2. OBJETIVIDADE E PRAGMATISMO: Não seja excessivamente conversador. Seja direto, prático e sucinto. Limite suas mensagens a no máximo 2 ou 3 parágrafos curtos ou listas claras de tópicos estratégicos.
-3. ESTRATÉGIAS E PERIODICIDADE: Pense no planejamento financeiro de forma organizada em ações com diferentes frequências: diárias, semanais e mensais.
-   - Ao chamar a ferramenta 'createOrUpdateStrategy', você DEVE especificar o parâmetro 'frequency' ('daily' para tarefas diárias, 'weekly' para semanais, 'monthly' para mensais, 'one-time' para dicas pontuais) para classificar as ações recomendadas no painel.
-4. USO MODERADO DAS FERRAMENTAS: Use as ferramentas de transação, saldo, estratégia ou meta apenas após acordar a ação ou quando o usuário aceitar ou pedir explicitamente para lançar a informação no painel.
+    // Resumo de memória de sessão (o que foi dito mas pode não estar registado)
+    const mem = sessionMemoryRef.current;
+    const sessionSummary = [
+      mem.mentionedIncomes.length > 0
+        ? `Rendimentos mencionados na conversa (podem não estar todos registados): ${mem.mentionedIncomes.map(i => `${i.amount} MT de ${i.source}${i.account ? ` na conta ${i.account}` : ""}`).join("; ")}`
+        : null,
+      mem.mentionedExpenses.length > 0
+        ? `Despesas mencionadas na conversa (podem não estar todas registadas): ${mem.mentionedExpenses.map(e => `${e.amount} MT de ${e.description}${e.account ? ` via ${e.account}` : ""}`).join("; ")}`
+        : null,
+      ...mem.contextNotes
+    ].filter(Boolean).join("\n");
 
-METODOLOGIAS FINANCEIRAS:
-Você domina metodologias de finanças (como a Regra 50/30/20, o Método dos Envelopes, Pague-se a Si Próprio Primeiro, Bola de Neve para dívidas).
-Se o usuário concordar em adotar um método no chat ou pedir conselhos:
-1. Recomende o método no chat de forma simples, concisa e pragmática.
-2. Aplique-o VISUALMENTE no painel do usuário usando as ferramentas quando acordado:
-   - Use 'createOrUpdateStrategy' (configurando 'frequency') para criar cartões explicando a estratégia adotada.
-   - Use 'setBudgetLimit' para configurar limites de orçamento alinhados com o método.
-   - Use 'adjustAccountBalance' para criar 'envelopes' virtuais se o usuário adotar o Método dos Envelopes.
-   - Use 'createOrUpdateGoal' para configurar as poupanças recomendadas.
+    const systemInstruction = `És o Kuhula AI — assessor financeiro pessoal de Moçambique. O teu papel é ajudar o utilizador a organizar as suas finanças através de conversa natural, sem formulários.
 
-DETALHES DE MOÇAMBIQUE:
-- Moeda: Metical Moçambicano (símbolo: MT, ISO: MZN). Formate sempre como '1.000 MT'.
-- Carteiras Móveis: M-Pesa, e-Mola, mKesh.
-- Bancos: BCI, Millennium Bim, Standard Bank, Absa, FNB, Moza Banco.
-- Custos do dia-a-dia: Credelec, FIPAG, TV Cabo, Chapas/Txopelas.
+REGRAS DE COMPORTAMENTO:
+1. MEMÓRIA CONVERSACIONAL: Lembra-te de tudo o que o utilizador mencionou nesta conversa — rendimentos, despesas, contas, metas. Nunca peças informação que já foi dada.
+2. DISTINÇÃO CLARA: Distingue sempre entre o que o utilizador "mencionou" na conversa e o que foi efectivamente "registado" no painel. Só usa as ferramentas quando o utilizador confirmar ou pedir explicitamente para registar.
+3. EXTRACÇÃO PROACTIVA: Quando o utilizador mencionar valores (ex: "recebi 45.000 MT", "paguei 8.000 MT de renda"), extrai esses dados e pergunta se quer registá-los no painel — mas não os registes sem confirmação.
+4. RESPOSTAS CURTAS: Máximo 2-3 parágrafos ou uma lista concisa. Sem rodeios, sem introduções desnecessárias.
+5. ESTRATÉGIAS COM FREQUÊNCIA: Ao criar estratégias com 'createOrUpdateStrategy', especifica sempre 'frequency' (daily/weekly/monthly/one-time).
+6. LÍNGUA: Responde sempre em português de Moçambique. Usa "utilizador", "painel", "registar". Moeda: sempre "1.000 MT" (nunca R$ ou €).
 
-ESTADO FINANCEIRO ATUAL DO USUÁRIO EM TEMPO REAL:
-${JSON.stringify({
-    accounts: currentState.accounts,
-    goals: currentState.goals,
-    budgetLimits: currentState.budgetLimits,
-    strategies: currentState.strategies || [],
-    recentTransactions: currentState.transactions.slice(-12)
-}, null, 2)}
+METODOLOGIAS QUE DOMINAS:
+Regra 50/30/20, Método dos Envelopes, Pague-se Primeiro, Bola de Neve. Aplica-as visualmente no painel quando o utilizador concordar, usando setBudgetLimit, createOrUpdateGoal e createOrUpdateStrategy.
 
-Mantenha as suas respostas altamente técnicas, estratégicas, curtas, objetivas e em português de Moçambique.`;
+CONTEXTO DE MOÇAMBIQUE:
+- Carteiras móveis: M-Pesa, e-Mola, mKesh
+- Bancos: BCI, Millennium Bim, Standard Bank, Absa, FNB, Moza Banco
+- Despesas comuns: Credelec, FIPAG, TV Cabo, Chapas/Txopelas, Xitique
 
-    // Filtrar histórico para enviar apenas mensagens com papéis válidos e limitar aos últimos 7 turnos (14 mensagens) para controlar tokens e contexto
+ESTADO ACTUAL DO PAINEL (em tempo real):
+- Saldo total consolidado: ${totalBalance.toLocaleString("pt-MZ")} MT
+- Contas: ${JSON.stringify(currentState.accounts)}
+- Metas activas: ${JSON.stringify(currentState.goals.map(g => ({ title: g.title, target: g.targetAmount, current: g.currentAmount, deadline: g.deadline })))}
+- Limites de orçamento: ${JSON.stringify(currentState.budgetLimits)}
+- Últimas transacções: ${JSON.stringify(recentTxs)}
+${sessionSummary ? `\nMEMÓRIA DA CONVERSA ACTUAL:\n${sessionSummary}` : ""}`;
+
+    // Histórico ampliado: 30 mensagens (15 turnos) para manter contexto conversacional longo
+    // Filtra mensagens de sistema e de tool responses intermediárias para economizar tokens
     const validHistory = history
       .filter(msg => msg.role === "user" || msg.role === "model")
-      .slice(-14);
+      .slice(-30);
 
     const res = await fetch("/api/chat", {
       method: "POST",
@@ -873,8 +877,12 @@ Mantenha as suas respostas altamente técnicas, estratégicas, curtas, objetivas
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        history: validHistory,
+        history: validHistory.map(m => ({
+          role: m.role,
+          content: m.parts?.[0]?.text ?? "",
+        })),
         systemInstruction,
+        provider,
         model,
         clientApiKey
       })
@@ -884,74 +892,91 @@ Mantenha as suas respostas altamente técnicas, estratégicas, curtas, objetivas
   };
 
   // Processar resposta do Gemini
-  const handleGeminiResponse = async (geminiData: any, currentHistory: ChatMessage[], currentState: AppState) => {
-    if (geminiData.candidates && geminiData.candidates[0].content && geminiData.candidates[0].content.parts) {
-      const parts = geminiData.candidates[0].content.parts;
-      const functionCalls = parts.filter((p: any) => p.functionCall);
-      const textPart = parts.find((p: any) => p.text);
+  const handleAIResponse = async (aiData: any, currentHistory: ChatMessage[], currentState: AppState) => {
+    // aiData já vem no formato normalizado: { text?, toolCalls?, usage? }
+    const { text, toolCalls, usage } = aiData;
 
-      if (functionCalls.length > 0) {
-        // IA acionou chamadas de função
-        const modelCallMsg = geminiData.candidates[0].content;
-        const updatedHistory = [...currentHistory, modelCallMsg];
+    if (usage) {
+      updateTokenStats(usage.promptTokens ?? 0, usage.completionTokens ?? 0);
+    }
 
-        const toolResponseParts = [];
-        let stateToMutate = { ...currentState };
+    if (toolCalls && toolCalls.length > 0) {
+      let stateToMutate = { ...currentState };
+      const toolResponseParts: any[] = [];
 
-        for (const fc of functionCalls) {
-          const name = fc.functionCall.name;
-          const args = fc.functionCall.args;
+      for (const tc of toolCalls) {
+        addSystemLog(`IA executou a ferramenta: **${tc.name}**`);
+        const executionResult = executeToolAction(tc.name, tc.args, stateToMutate);
+        stateToMutate = executionResult.newState;
 
-          addSystemLog(`IA executou a ferramenta: **${name}**`);
-          
-          // Modificar o estado local conforme a ferramenta
-          const executionResult = executeToolAction(name, args, stateToMutate);
-          stateToMutate = executionResult.newState;
+        // Persistência atómica na DB para cada operação
+        const dbAction = toolCallToPersistAction(tc.name, tc.args, executionResult.newState);
+        if (dbAction) persistAction(dbAction, stateToMutate);
 
-          toolResponseParts.push({
-            functionResponse: {
-              name,
-              response: executionResult.result
-            }
-          });
-        }
-
-        // Atualizar estado React e salvar no localStorage
-        saveState(stateToMutate);
-
-        // Adicionar resposta das ferramentas ao histórico
-        const toolContentMsg: ChatMessage = {
-          role: "user",
-          parts: toolResponseParts
-        };
-        const finalHistory = [...updatedHistory, toolContentMsg];
-
-        // Segunda chamada para gerar resposta de texto conversacional
-        setIsTyping(true);
-        const secondRes = await callChatAPI(finalHistory, stateToMutate);
-        setIsTyping(false);
-
-        // Capturar estatísticas de tokens da segunda chamada
-        if (secondRes.usageMetadata) {
-          updateTokenStats(
-            secondRes.usageMetadata.promptTokenCount || 0,
-            secondRes.usageMetadata.candidatesTokenCount || 0
-          );
-        }
-
-        if (secondRes.candidates && secondRes.candidates[0].content && secondRes.candidates[0].content.parts) {
-          const finalModelMsg = secondRes.candidates[0].content;
-          const finalResponseText = finalModelMsg.parts[0].text;
-          
-          setMessages(prev => [...prev, { role: "model", parts: [{ text: finalResponseText }] }]);
-          saveChatHistory([...finalHistory, finalModelMsg]);
-        }
-      } else if (textPart) {
-        // Apenas texto conversacional
-        const modelMsg = geminiData.candidates[0].content;
-        setMessages(prev => [...prev, modelMsg]);
-        saveChatHistory([...currentHistory, modelMsg]);
+        toolResponseParts.push({
+          functionResponse: { name: tc.name, response: executionResult.result }
+        });
       }
+
+      saveState(stateToMutate);
+
+      // Segunda chamada para resposta conversacional (só Gemini precisa disto;
+      // OpenAI/Anthropic já devolvem texto + tool calls juntos)
+      const toolMsg: ChatMessage = { role: "user", parts: toolResponseParts };
+      const finalHistory = [
+        ...currentHistory,
+        { role: "model" as const, parts: toolResponseParts.map(t => ({ functionCall: { name: t.functionResponse.name, args: {} } })) },
+        toolMsg
+      ];
+
+      setIsTyping(true);
+      const secondRes = await callChatAPI(finalHistory, stateToMutate);
+      setIsTyping(false);
+
+      if (secondRes.text) {
+        const modelMsg: ChatMessage = { role: "model", parts: [{ text: secondRes.text }] };
+        setMessages(prev => [...prev, modelMsg]);
+        saveChatHistory([...finalHistory, modelMsg]);
+      }
+      if (secondRes.usage) {
+        updateTokenStats(secondRes.usage.promptTokens, secondRes.usage.completionTokens);
+      }
+    } else if (text) {
+      const modelMsg: ChatMessage = { role: "model", parts: [{ text }] };
+      setMessages(prev => [...prev, modelMsg]);
+      saveChatHistory([...currentHistory, modelMsg]);
+    }
+  };
+
+  // Mapeia uma tool call para uma PersistAction atómica
+  const toolCallToPersistAction = (name: string, args: any, newState: AppState): PersistAction | null => {
+    switch (name) {
+      case "addTransaction": {
+        const tx = newState.transactions[newState.transactions.length - 1];
+        return tx ? { action: "insert_transaction", payload: { transaction: tx } } : null;
+      }
+      case "deleteTransaction":
+        return { action: "delete_transaction", payload: { id: args.id } };
+      case "adjustAccountBalance":
+        return { action: "upsert_account", payload: { name: args.accountName, balance: args.balance } };
+      case "deleteAccount":
+        return { action: "delete_account", payload: { name: args.accountName } };
+      case "createOrUpdateGoal": {
+        const goal = newState.goals.find(g => g.title.toLowerCase() === args.title.toLowerCase());
+        return goal ? { action: "upsert_goal", payload: { goal } } : null;
+      }
+      case "deleteGoal":
+        return { action: "delete_goal", payload: { title: args.title } };
+      case "setBudgetLimit":
+        return { action: "upsert_budget_limit", payload: { category: args.category, limitAmount: args.limitAmount } };
+      case "createOrUpdateStrategy": {
+        const strat = newState.strategies?.find(s => s.id === args.id);
+        return strat ? { action: "upsert_strategy", payload: { strategy: strat } } : null;
+      }
+      case "deleteStrategy":
+        return { action: "delete_strategy", payload: { id: args.id } };
+      default:
+        return null;
     }
   };
 
@@ -972,8 +997,18 @@ Mantenha as suas respostas altamente técnicas, estratégicas, curtas, objetivas
 
           if (args.type === "income") {
             stateCopy.accounts[args.account] += args.amount;
+            // Regista na memória de sessão que este rendimento foi efectivamente registado
+            const mem = sessionMemoryRef.current;
+            mem.mentionedIncomes = mem.mentionedIncomes.filter(
+              i => !(i.amount === args.amount && i.source === args.description)
+            );
           } else {
             stateCopy.accounts[args.account] -= args.amount;
+            // Regista na memória de sessão que esta despesa foi efectivamente registada
+            const mem = sessionMemoryRef.current;
+            mem.mentionedExpenses = mem.mentionedExpenses.filter(
+              e => !(e.amount === args.amount && e.description === args.description)
+            );
           }
 
           stateCopy.transactions.push({
@@ -1811,12 +1846,7 @@ Mantenha as suas respostas altamente técnicas, estratégicas, curtas, objetivas
             {/* Balões de Mensagem Dinâmicos */}
             {messages.filter(m => m.role === "user" || m.role === "model").map((msg, i) => {
               const isModel = msg.role === "model";
-              let text = msg.parts?.[0]?.text || "";
-              
-              if (!isModel && text && text.includes("CONTEXTO_FINANCEIRO_ATUAL")) {
-                const parts = text.split("--- MENSAGEM DO USUÁRIO ---");
-                text = parts[1] ? parts[1].trim() : text;
-              }
+              const text = msg.parts?.[0]?.text || "";
 
               const formattedHtml = text
                 .replace(/\n\n/g, "<br/><br/>")
@@ -2079,19 +2109,62 @@ Mantenha as suas respostas altamente técnicas, estratégicas, curtas, objetivas
                   Conexão IA (Google Gemini)
                 </h3>
                 <p className="text-[10.5px] text-zinc-400 leading-relaxed -mt-1">
-                  A IA é executada localmente através da API oficial. Os seus dados permanecem armazenados de forma privada no seu navegador.
+                  Escolhe o provider de IA e o modelo. A chave é guardada localmente no teu dispositivo.
                 </p>
+
+                {/* Selector de Provider */}
                 <div className="flex flex-col gap-1.5 mt-1">
-                  <label className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">Chave API do Gemini:</label>
+                  <label className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">Provider:</label>
+                  <Select value={inputProvider} onValueChange={(val) => handleProviderChange(val as ProviderId)}>
+                    <SelectTrigger className="bg-zinc-900 border-zinc-800 text-xs text-zinc-50 rounded">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-zinc-900 border border-zinc-800 text-zinc-50">
+                      {AI_PROVIDERS.map(p => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.label}
+                          {p.models.some(m => m.free) && (
+                            <span className="ml-2 text-[9px] text-emerald-400 font-bold">FREE</span>
+                          )}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Selector de Modelo */}
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">Modelo:</label>
+                  <Select value={inputModel} onValueChange={setInputModel}>
+                    <SelectTrigger className="bg-zinc-900 border-zinc-800 text-xs text-zinc-50 rounded">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-zinc-900 border border-zinc-800 text-zinc-50">
+                      {AI_PROVIDERS.find(p => p.id === inputProvider)?.models.map(m => (
+                        <SelectItem key={m.id} value={m.id}>
+                          {m.label}
+                          {m.free && <span className="ml-1 text-[9px] text-emerald-400">grátis</span>}
+                          {m.recommended && <span className="ml-1 text-[9px] text-zinc-400">★</span>}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Chave de API */}
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">
+                    Chave API ({AI_PROVIDERS.find(p => p.id === inputProvider)?.label}):
+                  </label>
                   <div className="relative flex items-center">
-                    <Input 
+                    <Input
                       type={showApiKey ? "text" : "password"}
                       value={inputApiKey}
                       onChange={(e) => setInputApiKey(e.target.value)}
-                      placeholder="Introduza a sua AI_KEY..."
+                      placeholder={AI_PROVIDERS.find(p => p.id === inputProvider)?.keyPlaceholder ?? "API Key..."}
                       className="bg-zinc-900 border-zinc-800 focus-visible:border-zinc-600 rounded pr-10 text-xs text-zinc-50"
                     />
-                    <button 
+                    <button
                       onClick={() => setShowApiKey(!showApiKey)}
                       className="absolute right-3 text-zinc-500 hover:text-zinc-300 transition-colors"
                     >
@@ -2099,22 +2172,16 @@ Mantenha as suas respostas altamente técnicas, estratégicas, curtas, objetivas
                     </button>
                   </div>
                   <small className="text-[9px] text-zinc-500">
-                    Obtenha uma chave grátis no <a href="https://aistudio.google.com/" target="_blank" rel="noopener noreferrer" className="text-zinc-300 hover:underline">Google AI Studio</a>.
+                    Obtém a chave em{" "}
+                    <a
+                      href={AI_PROVIDERS.find(p => p.id === inputProvider)?.keyUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-zinc-300 hover:underline"
+                    >
+                      {AI_PROVIDERS.find(p => p.id === inputProvider)?.keyUrl}
+                    </a>
                   </small>
-                </div>
-
-                <div className="flex flex-col gap-1.5 mt-1">
-                  <label className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">Modelo:</label>
-                  <Select value={inputModel} onValueChange={(val) => setInputModel(val || "gemini-2.5-flash")}>
-                    <SelectTrigger className="bg-zinc-900 border-zinc-800 text-xs text-zinc-50 rounded">
-                      <SelectValue placeholder="Selecione o modelo" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-zinc-900 border border-zinc-800 text-zinc-50">
-                      <SelectItem value="gemini-2.5-flash">Gemini 2.5 Flash (Recomendado - Rápido)</SelectItem>
-                      <SelectItem value="gemini-2.0-flash">Gemini 2.0 Flash</SelectItem>
-                      <SelectItem value="gemini-1.5-flash">Gemini 1.5 Flash</SelectItem>
-                    </SelectContent>
-                  </Select>
                 </div>
               </div>
 
