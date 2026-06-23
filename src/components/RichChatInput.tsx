@@ -107,24 +107,11 @@ export function RichChatInput({
 }: RichChatInputProps) {
   const editorRef = useRef<ReturnType<typeof useEditor>>(null);
   const handleSendRef = useRef<() => void>(() => {});
-
-  const handleSend = () => {
-    if (!editor) return;
-    const text = editorContentToText(editor);
-    if (!text.trim()) return;
-    onSend(text);
-    editor.commands.clearContent();
-  };
-
-  // Mantém a ref sempre actualizada
-  useEffect(() => {
-    handleSendRef.current = handleSend;
-  });
+  const [isEmpty, setIsEmpty] = useState(true);
 
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
-        // Activa atalhos markdown automáticos
         bulletList: { keepMarks: true },
         orderedList: { keepMarks: true },
         heading: { levels: [1, 2, 3] },
@@ -132,8 +119,11 @@ export function RichChatInput({
       Placeholder.configure({
         placeholder: "Fala comigo sobre as tuas finanças…",
       }),
-      Typography, // Converte automaticamente -- em —, ... em …, etc.
+      Typography,
     ],
+    onUpdate: ({ editor }) => {
+      setIsEmpty(editor.isEmpty);
+    },
     editorProps: {
       attributes: {
         class: "focus:outline-none text-zinc-100 text-[12.5px] leading-relaxed min-h-[44px] max-h-[200px] overflow-y-auto px-4 py-3",
@@ -153,12 +143,23 @@ export function RichChatInput({
     content: "",
   });
 
-  // Guardar ref do editor para acesso no handleKeyDown
+  const handleSend = () => {
+    if (!editor) return;
+    const text = editorContentToText(editor);
+    if (!text.trim()) return;
+    onSend(text);
+    editor.commands.clearContent();
+    setIsEmpty(true);
+  };
+
+  // Mantém refs sempre actualizadas
+  useEffect(() => {
+    handleSendRef.current = handleSend;
+  });
+
   useEffect(() => {
     if (editor) (editorRef as any).current = editor;
   }, [editor]);
-
-  const isEmpty = editor?.isEmpty ?? true;
 
   return (
     <div className="px-3 pb-3 pt-2 bg-zinc-950">
