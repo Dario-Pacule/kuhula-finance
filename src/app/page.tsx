@@ -2135,7 +2135,7 @@ ${sessionSummary ? `\nMEMÓRIA DA CONVERSA ACTUAL:\n${sessionSummary}` : ""}`;
                 {/* Selector de Modelo */}
                 <div className="flex flex-col gap-1.5">
                   <label className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">Modelo:</label>
-                  <Select value={inputModel} onValueChange={setInputModel}>
+                  <Select value={inputModel} onValueChange={(val) => val && setInputModel(val)}>
                     <SelectTrigger className="bg-zinc-900 border-zinc-800 text-xs text-zinc-50 rounded">
                       <SelectValue />
                     </SelectTrigger>
