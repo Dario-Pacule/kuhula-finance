@@ -1976,45 +1976,101 @@ ${sessionSummary ? `\nMEMÓRIA DA CONVERSA ACTUAL:\n${sessionSummary}` : ""}`;
         </ScrollArea>
       </div>
 
-      {/* Chips de Sugestão */}
-      <div className="px-4 py-2 border-t border-zinc-800 bg-zinc-950 flex gap-2 overflow-x-auto whitespace-nowrap scrollbar-none">
-        {SUGGESTIONS.map((text, idx) => (
-          <button 
-            key={idx}
-            onClick={() => handleSendMessage(text)}
-            className="px-2.5 py-1.5 bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-[10px] text-zinc-400 hover:text-zinc-100 rounded-md transition-all"
-          >
-            &quot;{text.length > 30 ? text.substring(0, 30) + "..." : text}&quot;
-          </button>
-        ))}
-      </div>
+      {/* Caixa de Entrada Inteligente */}
+      <div className="px-3 pb-3 pt-2 bg-zinc-950">
 
-      {/* Caixa de Entrada */}
-      <div className="p-4 border-t border-zinc-800 bg-zinc-950/40 flex items-center gap-3">
-        <div className="flex-1 flex items-center bg-zinc-900 border border-zinc-800 rounded-md px-3 py-1 focus-within:ring-1 focus-within:ring-zinc-400 focus-within:border-zinc-400 transition-all">
-          <Textarea 
+        {/* Chips de Sugestão — só quando o chat está vazio */}
+        {messages.filter(m => m.role === "user" || m.role === "model").length === 0 && (
+          <div className="flex gap-1.5 mb-2 flex-wrap">
+            {SUGGESTIONS.map((text, idx) => (
+              <button
+                key={idx}
+                onClick={() => handleSendMessage(text)}
+                className="px-2.5 py-1 bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 hover:border-zinc-600 text-[10px] text-zinc-400 hover:text-zinc-200 rounded-full transition-all"
+              >
+                {text.length > 32 ? text.substring(0, 32) + "…" : text}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Input principal */}
+        <div className={`flex flex-col bg-zinc-900 border rounded-2xl transition-all duration-150 ${
+          inputValue.length > 0
+            ? "border-zinc-600 shadow-lg shadow-black/20"
+            : "border-zinc-800"
+        }`}>
+
+          {/* Textarea */}
+          <Textarea
             value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
+            onChange={(e) => {
+              setInputValue(e.target.value);
+              // Auto-resize
+              e.target.style.height = "auto";
+              e.target.style.height = Math.min(e.target.scrollHeight, 160) + "px";
+            }}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                if (submitOnEnter) {
-                  e.preventDefault();
-                  handleSendMessage(inputValue);
-                }
+              if (e.key === "Enter" && !e.shiftKey && submitOnEnter) {
+                e.preventDefault();
+                if (inputValue.trim()) handleSendMessage(inputValue);
               }
             }}
-            placeholder="Introduza os seus gastos ou peça conselhos..." 
-            className="bg-transparent border-0 resize-none text-[11.5px] focus-visible:ring-0 focus-visible:ring-offset-0 px-0 py-1 flex-1 text-zinc-100 placeholder-zinc-500 min-h-[26px] max-h-[70px]"
+            placeholder="Fala comigo sobre as tuas finanças…"
             rows={1}
+            className="bg-transparent border-0 resize-none text-[12.5px] focus-visible:ring-0 focus-visible:ring-offset-0 px-4 pt-3 pb-1 text-zinc-100 placeholder-zinc-600 min-h-[44px] max-h-[160px] leading-relaxed overflow-hidden"
+            style={{ height: "44px" }}
           />
-          <Button 
-            onClick={() => handleSendMessage(inputValue)}
-            size="icon" 
-            className="w-7 h-7 rounded bg-zinc-100 hover:bg-zinc-200 text-zinc-900 ml-2 flex-shrink-0"
-          >
-            <Send className="w-3.5 h-3.5" />
-          </Button>
+
+          {/* Barra inferior com acções */}
+          <div className="flex items-center justify-between px-3 pb-2.5 pt-1">
+
+            {/* Esquerda: microfone + contador de caracteres */}
+            <div className="flex items-center gap-2">
+              {/* Contador de caracteres — só aparece quando está a escrever */}
+              {inputValue.length > 200 && (
+                <span className={`text-[9px] font-mono transition-colors ${
+                  inputValue.length > 1800 ? "text-red-400" : "text-zinc-500"
+                }`}>
+                  {inputValue.length}/2000
+                </span>
+              )}
+              {/* Dica shift+enter */}
+              {inputValue.length > 0 && (
+                <span className="text-[9px] text-zinc-600 hidden sm:block">
+                  Shift+Enter para nova linha
+                </span>
+              )}
+            </div>
+
+            {/* Direita: botão enviar */}
+            <button
+              onClick={() => { if (inputValue.trim()) handleSendMessage(inputValue); }}
+              disabled={!inputValue.trim() || isTyping}
+              className={`flex items-center justify-center w-8 h-8 rounded-xl transition-all duration-150 ${
+                inputValue.trim() && !isTyping
+                  ? "bg-zinc-100 hover:bg-white text-zinc-900 shadow-sm hover:scale-105 active:scale-95"
+                  : "bg-zinc-800 text-zinc-600 cursor-not-allowed"
+              }`}
+            >
+              {isTyping ? (
+                <div className="w-3.5 h-3.5 border-2 border-zinc-600 border-t-zinc-400 rounded-full animate-spin" />
+              ) : (
+                <Send className="w-3.5 h-3.5" />
+              )}
+            </button>
+          </div>
         </div>
+
+        {/* Aviso de provider não configurado */}
+        {!clientApiKey && (
+          <p className="text-center text-[9.5px] text-zinc-600 mt-1.5">
+            Configura a chave de API em{" "}
+            <button onClick={() => setIsSettingsOpen(true)} className="text-zinc-400 hover:text-zinc-200 underline underline-offset-2">
+              Definições ⚙️
+            </button>
+          </p>
+        )}
       </div>
     </section>
   );
