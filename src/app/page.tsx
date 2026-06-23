@@ -913,11 +913,13 @@ O dinheiro é sempre um reflexo de comportamentos, hábitos e crenças. O teu tr
 - "O que acontece quando recebes dinheiro extra?"
 - "Há alguma categoria onde sentes que perdes o controlo?"
 
-**Usa inputs interactivos** (askUserInput) sempre que uma escolha estruturada ajuda mais do que uma pergunta aberta. Exemplos:
-- Ao perguntar por categorias de gastos → múltipla escolha
-- Ao confirmar um registo → Sim/Não
-- Ao perguntar por contas → escolha única
-- Ao definir metas de poupança → slider com valor
+**Usa inputs interactivos** (askUserInput) APENAS quando há opções predefinidas claras e limitadas. Exemplos correctos:
+- "Qual conta usaste?" → single: M-Pesa|BCI|e-Mola
+- "Queres registar?" → confirm
+- "Que categorias incluir?" → multiple com lista fixa
+- "Quanto poupar por mês?" → slider com intervalo conhecido
+
+**NUNCA uses askUserInput para perguntas abertas** como "O que aconteceu?", "Qual é o detalhe?", "Conta-me mais." — essas ficam como texto normal. Se não tens opções predefinidas, escreve a pergunta normalmente.
 
 **Só regista no painel após compreender e confirmar.** Nunca uses as ferramentas de forma reactiva. Primeiro compreende o contexto, depois pergunta se quer registar.
 
@@ -987,40 +989,58 @@ ${sessionSummary ? `\nCONTEXTO DA CONVERSA ACTUAL:\n${sessionSummary}` : ""}`;
     return data;
   };
 
-  // Extrai tool calls embebidas no texto (para providers que não suportam function calling nativo)
-  const extractEmbeddedToolCalls = (text: string): { cleanText: string; toolCalls: Array<{ name: string; args: any }> } => {
-    const toolNames = [
-      "askUserInput", "addTransaction", "deleteTransaction",
-      "createOrUpdateGoal", "deleteGoal", "adjustAccountBalance",
-      "deleteAccount", "setBudgetLimit", "createOrUpdateStrategy", "deleteStrategy"
-    ];
+  // Extrai tool calls embebidas no texto (providers que não suportam function calling nativo)
+  const extractEmbeddedToolCalls = (rawText: string): { cleanText: string; toolCalls: Array<{ name: string; args: any }> } => {
     const toolCalls: Array<{ name: string; args: any }> = [];
-    let cleanText = text;
+    let cleanText = rawText;
 
-    // Detecta padrões: {"question": ...} ou {"type": ...} ou {"amount": ...}
-    // que correspondem a argumentos de tools conhecidas
-    const jsonPattern = /\{[\s\S]*?\}/g;
-    const matches = text.match(jsonPattern) ?? [];
+    // Extrai todos os blocos JSON válidos do texto (incluindo nested)
+    const extractJsonBlocks = (str: string): string[] => {
+      const blocks: string[] = [];
+      let depth = 0;
+      let start = -1;
+      for (let i = 0; i < str.length; i++) {
+        if (str[i] === "{") {
+          if (depth === 0) start = i;
+          depth++;
+        } else if (str[i] === "}") {
+          depth--;
+          if (depth === 0 && start !== -1) {
+            blocks.push(str.slice(start, i + 1));
+            start = -1;
+          }
+        }
+      }
+      return blocks;
+    };
 
-    for (const match of matches) {
+    for (const block of extractJsonBlocks(rawText)) {
       try {
-        const parsed = JSON.parse(match);
-        // Identifica qual tool com base nas chaves do JSON
-        if (parsed.question && parsed.type) {
+        const parsed = JSON.parse(block);
+        let matched = false;
+
+        if (parsed.question !== undefined && parsed.type !== undefined) {
           toolCalls.push({ name: "askUserInput", args: parsed });
-          cleanText = cleanText.replace(match, "").trim();
-        } else if (parsed.amount && parsed.type && (parsed.type === "income" || parsed.type === "expense")) {
+          matched = true;
+        } else if (parsed.amount && (parsed.type === "income" || parsed.type === "expense")) {
           toolCalls.push({ name: "addTransaction", args: parsed });
-          cleanText = cleanText.replace(match, "").trim();
-        } else if (parsed.title && parsed.targetAmount) {
+          matched = true;
+        } else if (parsed.title && parsed.targetAmount !== undefined) {
           toolCalls.push({ name: "createOrUpdateGoal", args: parsed });
-          cleanText = cleanText.replace(match, "").trim();
+          matched = true;
         } else if (parsed.accountName && parsed.balance !== undefined) {
           toolCalls.push({ name: "adjustAccountBalance", args: parsed });
-          cleanText = cleanText.replace(match, "").trim();
+          matched = true;
         } else if (parsed.category && parsed.limitAmount !== undefined) {
           toolCalls.push({ name: "setBudgetLimit", args: parsed });
-          cleanText = cleanText.replace(match, "").trim();
+          matched = true;
+        } else if (parsed.id && parsed.title && parsed.description) {
+          toolCalls.push({ name: "createOrUpdateStrategy", args: parsed });
+          matched = true;
+        }
+
+        if (matched) {
+          cleanText = cleanText.replace(block, "").trim();
         }
       } catch {
         // JSON inválido — ignora
