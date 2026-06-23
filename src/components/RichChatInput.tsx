@@ -24,7 +24,7 @@ import { Send } from "lucide-react";
 
 // ── Converter conteúdo Tiptap → texto plano/markdown para a IA ──
 
-function editorContentToText(editor: ReturnType<typeof useEditor>): string {
+function editorContentToText(editor: ReturnType<typeof useEditor> | null): string {
   if (!editor) return "";
 
   const json = editor.getJSON();
