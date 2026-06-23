@@ -1061,30 +1061,27 @@ ${sessionSummary ? `\nCONTEXTO DA CONVERSA ACTUAL:\n${sessionSummary}` : ""}`;
 
     // ── Sanitizar texto: alguns providers (Groq, OpenRouter) às vezes
     // embebem JSON de tool calls no texto em vez de os devolver estruturados.
-    // Detectamos e extraímos esses JSONs para processar correctamente.
     if (text && !toolCalls?.length) {
       const extracted = extractEmbeddedToolCalls(text);
 
-      // Log de debug sempre que houver texto com possível JSON
-      if (text.includes("{")) {
-        setDebugInfo(prev => {
-          const ts = new Date().toLocaleTimeString("pt-MZ");
-          const log = [
-            `[${ts}] RESPOSTA DA IA (texto bruto)`,
-            `Provider: ${provider} | Modelo: ${model}`,
-            `── TEXTO ORIGINAL ──`,
-            text,
-            `── JSON DETECTADOS ──`,
-            extracted.toolCalls.length > 0
-              ? extracted.toolCalls.map(tc => `tool: ${tc.name}\nargs: ${JSON.stringify(tc.args, null, 2)}`).join("\n")
-              : "Nenhum JSON válido extraído.",
-            `── TEXTO LIMPO ──`,
-            extracted.cleanText || "(vazio)",
-            "─".repeat(40),
-          ].join("\n");
-          return prev ? prev + "\n\n" + log : log;
-        });
-      }
+      // Log de debug — captura TODAS as respostas de texto
+      const ts = new Date().toLocaleTimeString("pt-MZ");
+      const log = [
+        `[${ts}] RESPOSTA IA`,
+        `Provider: ${provider} | Modelo: ${model}`,
+        `toolCalls recebidos: ${JSON.stringify(aiData.toolCalls ?? [])}`,
+        `── TEXTO BRUTO (${text.length} chars) ──`,
+        text.slice(0, 600),
+        `── JSON EXTRAÍDOS ──`,
+        extracted.toolCalls.length > 0
+          ? extracted.toolCalls.map(tc => `${tc.name}: ${JSON.stringify(tc.args)}`).join("\n")
+          : "nenhum",
+        `── TEXTO APÓS LIMPEZA ──`,
+        extracted.cleanText.slice(0, 200) || "(igual)",
+        "─".repeat(40),
+      ].join("\n");
+
+      setDebugInfo(prev => prev ? prev + "\n\n" + log : log);
 
       if (extracted.toolCalls.length > 0) {
         text = extracted.cleanText.trim();
