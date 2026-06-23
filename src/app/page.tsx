@@ -807,10 +807,22 @@ export default function Home() {
       await handleAIResponse(response, newHistory, state);
     } catch (err: any) {
       setIsTyping(false);
+      const errorDetail = err.message || String(err);
+      const timestamp = new Date().toLocaleTimeString("pt-MZ");
+      const debugMsg = [
+        `[${timestamp}] ERRO na chamada à IA`,
+        `Provider: ${provider} | Modelo: ${model}`,
+        `Mensagem: ${errorDetail}`,
+      ].join("\n");
+
+      // Mostra erro no chat
       setMessages(prev => [
         ...prev,
-        { role: "model", parts: [{ text: `Ocorreu um erro: ${err.message || err}. Verifique as configurações.` }] }
+        { role: "model", parts: [{ text: `Ocorreu um erro ao contactar o provider **${provider}**:\n\`${errorDetail}\`\n\nVerifica as configurações ⚙️ — chave de API e modelo seleccionado.` }] }
       ]);
+
+      // Mostra erro na área de debug
+      setDebugInfo(prev => (prev ? prev + "\n\n" : "") + debugMsg);
     }
   };
 
@@ -888,7 +900,14 @@ ${sessionSummary ? `\nMEMÓRIA DA CONVERSA ACTUAL:\n${sessionSummary}` : ""}`;
       })
     });
 
-    return await res.json();
+    const data = await res.json();
+
+    // Se a API route devolveu um erro, lança-o para o catch do handleSendMessage
+    if (!res.ok || data.error) {
+      throw new Error(data.error ?? `Erro HTTP ${res.status}`);
+    }
+
+    return data;
   };
 
   // Processar resposta do Gemini

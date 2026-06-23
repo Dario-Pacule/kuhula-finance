@@ -199,7 +199,7 @@ async function callGemini(
   });
 
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error?.message ?? `Gemini ${res.statusText}`);
+  if (!res.ok) throw new Error(`Gemini ${res.status}: ${data.error?.message ?? res.statusText}`);
 
   const parts = data.candidates?.[0]?.content?.parts ?? [];
   const textPart = parts.find((p: any) => p.text);
@@ -249,7 +249,7 @@ async function callOpenAI(
   });
 
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error?.message ?? `OpenAI ${res.statusText}`);
+  if (!res.ok) throw new Error(`OpenAI ${res.status}: ${data.error?.message ?? res.statusText}`);
 
   const choice = data.choices?.[0];
   const toolCalls = (choice?.message?.tool_calls ?? []).map((tc: any) => ({
@@ -295,7 +295,7 @@ async function callAnthropic(
   });
 
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error?.message ?? `Anthropic ${res.statusText}`);
+  if (!res.ok) throw new Error(`Anthropic ${res.status}: ${data.error?.message ?? res.statusText}`);
 
   const textBlock = data.content?.find((b: any) => b.type === "text");
   const toolCalls = (data.content ?? [])
@@ -392,9 +392,10 @@ export async function POST(req: Request) {
 
     return NextResponse.json(result);
   } catch (err: any) {
-    console.error(`[chat API] provider=${provider} model=${model}`, err);
+    const errorMsg = err.message ?? "Erro interno";
+    console.error(`[chat API] provider=${provider} model=${model} error=${errorMsg}`);
     return NextResponse.json(
-      { error: err.message ?? "Erro interno" },
+      { error: errorMsg },
       { status: 500 }
     );
   }
