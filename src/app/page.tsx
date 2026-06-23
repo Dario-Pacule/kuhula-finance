@@ -987,13 +987,67 @@ ${sessionSummary ? `\nCONTEXTO DA CONVERSA ACTUAL:\n${sessionSummary}` : ""}`;
     return data;
   };
 
-  // Processar resposta do Gemini
+  // Extrai tool calls embebidas no texto (para providers que não suportam function calling nativo)
+  const extractEmbeddedToolCalls = (text: string): { cleanText: string; toolCalls: Array<{ name: string; args: any }> } => {
+    const toolNames = [
+      "askUserInput", "addTransaction", "deleteTransaction",
+      "createOrUpdateGoal", "deleteGoal", "adjustAccountBalance",
+      "deleteAccount", "setBudgetLimit", "createOrUpdateStrategy", "deleteStrategy"
+    ];
+    const toolCalls: Array<{ name: string; args: any }> = [];
+    let cleanText = text;
+
+    // Detecta padrões: {"question": ...} ou {"type": ...} ou {"amount": ...}
+    // que correspondem a argumentos de tools conhecidas
+    const jsonPattern = /\{[\s\S]*?\}/g;
+    const matches = text.match(jsonPattern) ?? [];
+
+    for (const match of matches) {
+      try {
+        const parsed = JSON.parse(match);
+        // Identifica qual tool com base nas chaves do JSON
+        if (parsed.question && parsed.type) {
+          toolCalls.push({ name: "askUserInput", args: parsed });
+          cleanText = cleanText.replace(match, "").trim();
+        } else if (parsed.amount && parsed.type && (parsed.type === "income" || parsed.type === "expense")) {
+          toolCalls.push({ name: "addTransaction", args: parsed });
+          cleanText = cleanText.replace(match, "").trim();
+        } else if (parsed.title && parsed.targetAmount) {
+          toolCalls.push({ name: "createOrUpdateGoal", args: parsed });
+          cleanText = cleanText.replace(match, "").trim();
+        } else if (parsed.accountName && parsed.balance !== undefined) {
+          toolCalls.push({ name: "adjustAccountBalance", args: parsed });
+          cleanText = cleanText.replace(match, "").trim();
+        } else if (parsed.category && parsed.limitAmount !== undefined) {
+          toolCalls.push({ name: "setBudgetLimit", args: parsed });
+          cleanText = cleanText.replace(match, "").trim();
+        }
+      } catch {
+        // JSON inválido — ignora
+      }
+    }
+
+    return { cleanText, toolCalls };
+  };
+
+  // Processar resposta da IA
   const handleAIResponse = async (aiData: any, currentHistory: ChatMessage[], currentState: AppState) => {
     // aiData já vem no formato normalizado: { text?, toolCalls?, usage? }
-    const { text, toolCalls, usage } = aiData;
+    let { text, toolCalls, usage } = aiData;
 
     if (usage) {
       updateTokenStats(usage.promptTokens ?? 0, usage.completionTokens ?? 0);
+    }
+
+    // ── Sanitizar texto: alguns providers (Groq, OpenRouter) às vezes
+    // embebem JSON de tool calls no texto em vez de os devolver estruturados.
+    // Detectamos e extraímos esses JSONs para processar correctamente.
+    if (text && !toolCalls?.length) {
+      const extracted = extractEmbeddedToolCalls(text);
+      if (extracted.toolCalls.length > 0) {
+        text = extracted.cleanText.trim();
+        toolCalls = extracted.toolCalls;
+      }
     }
 
     if (toolCalls && toolCalls.length > 0) {
