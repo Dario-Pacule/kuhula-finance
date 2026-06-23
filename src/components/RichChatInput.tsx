@@ -106,6 +106,20 @@ export function RichChatInput({
   showSuggestions,
 }: RichChatInputProps) {
   const editorRef = useRef<ReturnType<typeof useEditor>>(null);
+  const handleSendRef = useRef<() => void>(() => {});
+
+  const handleSend = () => {
+    if (!editor) return;
+    const text = editorContentToText(editor);
+    if (!text.trim()) return;
+    onSend(text);
+    editor.commands.clearContent();
+  };
+
+  // Mantém a ref sempre actualizada
+  useEffect(() => {
+    handleSendRef.current = handleSend;
+  });
 
   const editor = useEditor({
     extensions: [
@@ -129,7 +143,7 @@ export function RichChatInput({
           const text = editorContentToText(editorRef.current ?? null);
           if (text.trim()) {
             event.preventDefault();
-            handleSend();
+            handleSendRef.current();
             return true;
           }
         }
@@ -143,17 +157,6 @@ export function RichChatInput({
   useEffect(() => {
     if (editor) (editorRef as any).current = editor;
   }, [editor]);
-
-  const handleSend = () => {
-    if (!editor) return;
-    const text = editorContentToText(editor);
-    if (!text.trim()) return;
-    onSend(text);
-    editor.commands.clearContent();
-    // Reset altura
-    const el = editor.view.dom as HTMLElement;
-    el.style.height = "44px";
-  };
 
   const isEmpty = editor?.isEmpty ?? true;
 
