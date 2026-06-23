@@ -1064,6 +1064,28 @@ ${sessionSummary ? `\nCONTEXTO DA CONVERSA ACTUAL:\n${sessionSummary}` : ""}`;
     // Detectamos e extraímos esses JSONs para processar correctamente.
     if (text && !toolCalls?.length) {
       const extracted = extractEmbeddedToolCalls(text);
+
+      // Log de debug sempre que houver texto com possível JSON
+      if (text.includes("{")) {
+        setDebugInfo(prev => {
+          const ts = new Date().toLocaleTimeString("pt-MZ");
+          const log = [
+            `[${ts}] RESPOSTA DA IA (texto bruto)`,
+            `Provider: ${provider} | Modelo: ${model}`,
+            `── TEXTO ORIGINAL ──`,
+            text,
+            `── JSON DETECTADOS ──`,
+            extracted.toolCalls.length > 0
+              ? extracted.toolCalls.map(tc => `tool: ${tc.name}\nargs: ${JSON.stringify(tc.args, null, 2)}`).join("\n")
+              : "Nenhum JSON válido extraído.",
+            `── TEXTO LIMPO ──`,
+            extracted.cleanText || "(vazio)",
+            "─".repeat(40),
+          ].join("\n");
+          return prev ? prev + "\n\n" + log : log;
+        });
+      }
+
       if (extracted.toolCalls.length > 0) {
         text = extracted.cleanText.trim();
         toolCalls = extracted.toolCalls;
