@@ -200,7 +200,12 @@ export default function Home() {
   const [isDebugOpen, setIsDebugOpen] = useState<boolean>(false);
   const [debugInfo, setDebugInfo] = useState<string>("");
   const [errorLogs, setErrorLogs] = useState<Array<{ timestamp: string; provider: string; model: string; message: string }>>([]);
-  const [isDebugView, setIsDebugView] = useState<"layout" | "errors">("layout");
+  const [isDebugView, setIsDebugView] = useState<"layout" | "errors" | "health">("layout");
+  const [healthCheck, setHealthCheck] = useState<Array<{
+    label: string;
+    status: "ok" | "error" | "warning" | "loading";
+    detail: string;
+  }>>([]);
   const [isCopied, setIsCopied] = useState<boolean>(false);
 
   // Gestão Manual de Contas
@@ -538,7 +543,95 @@ export default function Home() {
     setIsDebugOpen(true);
   };
 
-  const handleCopyDebug = () => {
+  const runHealthCheck = async () => {
+    setIsDebugView("health");
+    const loading = [
+      { label: "API de IA (/api/chat)", status: "loading" as const, detail: "A verificar..." },
+      { label: "Base de Dados (/api/state)", status: "loading" as const, detail: "A verificar..." },
+      { label: "Chave de API configurada", status: "loading" as const, detail: "A verificar..." },
+      { label: "Histórico de Chat (/api/chat-history)", status: "loading" as const, detail: "A verificar..." },
+      { label: "Ligação à Internet", status: "loading" as const, detail: "A verificar..." },
+    ];
+    setHealthCheck(loading);
+
+    const results = [...loading];
+
+    // 1. Ligação à internet
+    try {
+      const start = Date.now();
+      await fetch("https://www.google.com/favicon.ico", { mode: "no-cors", cache: "no-store" });
+      results[4] = { label: "Ligação à Internet", status: "ok", detail: `Online (${Date.now() - start}ms)` };
+    } catch {
+      results[4] = { label: "Ligação à Internet", status: "error", detail: "Sem ligação à internet" };
+    }
+    setHealthCheck([...results]);
+
+    // 2. Chave de API configurada
+    if (!clientApiKey) {
+      results[2] = { label: "Chave de API configurada", status: "error", detail: `Nenhuma chave configurada para ${provider}` };
+    } else {
+      results[2] = { label: "Chave de API configurada", status: "ok", detail: `${provider} — chave presente (${clientApiKey.slice(0, 8)}...)` };
+    }
+    setHealthCheck([...results]);
+
+    // 3. API de IA
+    try {
+      const start = Date.now();
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          history: [{ role: "user", content: "olá" }],
+          systemInstruction: "Responde apenas com: ok",
+          provider,
+          model,
+          clientApiKey,
+        }),
+      });
+      const data = await res.json();
+      const ms = Date.now() - start;
+      if (!res.ok || data.error) {
+        results[0] = { label: "API de IA (/api/chat)", status: "error", detail: data.error ?? `HTTP ${res.status}` };
+      } else {
+        results[0] = { label: "API de IA (/api/chat)", status: "ok", detail: `${provider}/${model} — ${ms}ms` };
+      }
+    } catch (e: any) {
+      results[0] = { label: "API de IA (/api/chat)", status: "error", detail: e.message ?? "Erro desconhecido" };
+    }
+    setHealthCheck([...results]);
+
+    // 4. Base de dados
+    try {
+      const start = Date.now();
+      const res = await fetch("/api/state?userId=health-check-ping");
+      const ms = Date.now() - start;
+      if (res.ok) {
+        results[1] = { label: "Base de Dados (/api/state)", status: "ok", detail: `Supabase acessível (${ms}ms)` };
+      } else {
+        results[1] = { label: "Base de Dados (/api/state)", status: "warning", detail: `HTTP ${res.status} — pode ser problema de configuração` };
+      }
+    } catch (e: any) {
+      results[1] = { label: "Base de Dados (/api/state)", status: "error", detail: e.message ?? "Sem resposta" };
+    }
+    setHealthCheck([...results]);
+
+    // 5. Histórico de chat
+    try {
+      const start = Date.now();
+      const res = await fetch("/api/chat-history?userId=health-check-ping");
+      const ms = Date.now() - start;
+      if (res.ok) {
+        results[3] = { label: "Histórico de Chat (/api/chat-history)", status: "ok", detail: `Acessível (${ms}ms)` };
+      } else {
+        results[3] = { label: "Histórico de Chat (/api/chat-history)", status: "warning", detail: `HTTP ${res.status}` };
+      }
+    } catch (e: any) {
+      results[3] = { label: "Histórico de Chat (/api/chat-history)", status: "error", detail: e.message ?? "Sem resposta" };
+    }
+    setHealthCheck([...results]);
+  };
+
+
     if (typeof navigator === "undefined") return;
     
     if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -2372,14 +2465,26 @@ ${sessionSummary ? `\nMEMÓRIA DA CONVERSA ACTUAL:\n${sessionSummary}` : ""}`;
                 className={`flex-1 text-[10px] font-semibold py-1 rounded transition-colors flex items-center justify-center gap-1.5 ${isDebugView === "errors" ? "bg-zinc-800 text-zinc-100" : "text-zinc-500 hover:text-zinc-300"}`}
                 onClick={() => setIsDebugView("errors")}
               >
-                Erros do Sistema
+                Erros
                 {errorLogs.length > 0 && (
                   <span className="bg-red-500 text-white text-[8px] font-bold px-1.5 py-0.5 rounded-full">{errorLogs.length}</span>
                 )}
               </button>
+              <button
+                className={`flex-1 text-[10px] font-semibold py-1 rounded transition-colors flex items-center justify-center gap-1.5 ${isDebugView === "health" ? "bg-zinc-800 text-zinc-100" : "text-zinc-500 hover:text-zinc-300"}`}
+                onClick={runHealthCheck}
+              >
+                Health Check
+                {healthCheck.length > 0 && healthCheck.some(h => h.status === "error") && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
+                )}
+                {healthCheck.length > 0 && !healthCheck.some(h => h.status === "error") && healthCheck.every(h => h.status === "ok") && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
+                )}
+              </button>
             </div>
 
-            {isDebugView === "layout" ? (
+            {isDebugView === "layout" && (
               <>
                 <Textarea
                   value={debugInfo}
@@ -2390,7 +2495,9 @@ ${sessionSummary ? `\nMEMÓRIA DA CONVERSA ACTUAL:\n${sessionSummary}` : ""}`;
                   *Estes detalhes incluem dados puramente visuais e técnicos sobre o ecrã e as dimensões do contentor, sem qualquer dado bancário sensível.*
                 </p>
               </>
-            ) : (
+            )}
+
+            {isDebugView === "errors" && (
               <div className="flex flex-col gap-2 h-[280px] overflow-y-auto">
                 {errorLogs.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-full gap-2 text-zinc-600">
@@ -2415,11 +2522,56 @@ ${sessionSummary ? `\nMEMÓRIA DA CONVERSA ACTUAL:\n${sessionSummary}` : ""}`;
                 )}
               </div>
             )}
+
+            {isDebugView === "health" && (
+              <div className="flex flex-col gap-2 h-[280px] overflow-y-auto">
+                {healthCheck.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-full gap-2 text-zinc-600">
+                    <p className="text-xs">Clica em Health Check para iniciar.</p>
+                  </div>
+                ) : (
+                  <>
+                    {healthCheck.map((item, i) => (
+                      <div key={i} className={`bg-zinc-900 rounded p-2.5 flex items-start gap-2.5 border ${
+                        item.status === "ok" ? "border-emerald-900/40" :
+                        item.status === "error" ? "border-red-900/40" :
+                        item.status === "warning" ? "border-yellow-900/40" :
+                        "border-zinc-800"
+                      }`}>
+                        <div className="mt-0.5 shrink-0">
+                          {item.status === "loading" && (
+                            <div className="w-3 h-3 rounded-full border-2 border-zinc-600 border-t-zinc-300 animate-spin" />
+                          )}
+                          {item.status === "ok" && <div className="w-3 h-3 rounded-full bg-emerald-500" />}
+                          {item.status === "error" && <div className="w-3 h-3 rounded-full bg-red-500" />}
+                          {item.status === "warning" && <div className="w-3 h-3 rounded-full bg-yellow-500" />}
+                        </div>
+                        <div className="flex flex-col gap-0.5 min-w-0">
+                          <span className="text-[10px] font-semibold text-zinc-200">{item.label}</span>
+                          <span className={`text-[9px] font-mono break-all ${
+                            item.status === "ok" ? "text-emerald-400" :
+                            item.status === "error" ? "text-red-400" :
+                            item.status === "warning" ? "text-yellow-400" :
+                            "text-zinc-500"
+                          }`}>{item.detail}</span>
+                        </div>
+                      </div>
+                    ))}
+                    <button
+                      onClick={runHealthCheck}
+                      className="text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors text-center py-1"
+                    >
+                      ↻ Repetir verificação
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
           </div>
 
           <DialogFooter className="border-t border-zinc-800 pt-4 flex sm:justify-between items-center w-full gap-2">
             <div className="text-[11px] text-zinc-400">
-              {isCopied && <span className="flex items-center gap-1 text-emerald-400"><Check className="w-3.5 h-3.5" /> Copiado com sucesso!</span>}
+              {isCopied && <span className="flex items-center gap-1 text-emerald-400"><Check className="w-3.5 h-3.5" /> Copiado!</span>}
               {errorLogs.length > 0 && isDebugView === "errors" && (
                 <button onClick={() => setErrorLogs([])} className="text-[10px] text-zinc-500 hover:text-red-400 transition-colors">
                   Limpar logs
@@ -2427,10 +2579,12 @@ ${sessionSummary ? `\nMEMÓRIA DA CONVERSA ACTUAL:\n${sessionSummary}` : ""}`;
               )}
             </div>
             <div className="flex gap-2">
-              <Button onClick={handleCopyDebug} className="bg-zinc-100 hover:bg-zinc-200 text-zinc-900 text-xs font-semibold rounded flex items-center gap-1.5">
-                {isCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                {isCopied ? "Copiado!" : "Copiar"}
-              </Button>
+              {isDebugView !== "health" && (
+                <Button onClick={handleCopyDebug} className="bg-zinc-100 hover:bg-zinc-200 text-zinc-900 text-xs font-semibold rounded flex items-center gap-1.5">
+                  {isCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  {isCopied ? "Copiado!" : "Copiar"}
+                </Button>
+              )}
               <Button onClick={() => setIsDebugOpen(false)} variant="outline" className="border-zinc-800 hover:bg-zinc-900 text-xs text-zinc-400">
                 Fechar
               </Button>
