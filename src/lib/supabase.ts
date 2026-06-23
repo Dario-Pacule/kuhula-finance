@@ -1,0 +1,15 @@
+import { createClient } from "@supabase/supabase-js";
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+
+// Cliente público (browser) — usa a chave anon + RLS
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+// Cliente de servidor — usa a service role key para operações admin (API routes)
+// Nunca expor esta chave no browser.
+export const supabaseAdmin = createClient(
+  supabaseUrl,
+  process.env.SUPABASE_SERVICE_ROLE_KEY ?? supabaseAnonKey,
+  { auth: { persistSession: false } }
+);
