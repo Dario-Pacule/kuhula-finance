@@ -554,7 +554,7 @@ export default function Home() {
     ];
     setHealthCheck(loading);
 
-    const results = [...loading];
+    const results: Array<{ label: string; status: "ok" | "error" | "warning" | "loading"; detail: string }> = [...loading];
 
     // 1. Ligação à internet
     try {
