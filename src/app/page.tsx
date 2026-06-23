@@ -69,81 +69,11 @@ import { usePersistence, type PersistAction } from "@/hooks/usePersistence";
 import { AI_PROVIDERS, getDefaultModel, type ProviderId } from "@/lib/ai-providers";
 
 const DEFAULT_STATE: AppState = {
-  accounts: {
-    "M-Pesa": 4500.00,
-    "BCI": 32000.00,
-    "e-Mola": 1200.00
-  },
-  transactions: [
-    {
-      id: "tx-1",
-      description: "Recarga Credelec",
-      amount: 1000.00,
-      type: "expense",
-      category: "Energia",
-      account: "M-Pesa",
-      date: "2026-06-01",
-      isRecurring: true,
-      dayOfMonth: 1
-    },
-    {
-      id: "tx-2",
-      description: "Supermercado Recheio",
-      amount: 3200.00,
-      type: "expense",
-      category: "Alimentação",
-      account: "BCI",
-      date: "2026-06-02",
-      isRecurring: false
-    },
-    {
-      id: "tx-3",
-      description: "Salário Base",
-      amount: 45000.00,
-      type: "income",
-      category: "Salário",
-      account: "BCI",
-      date: "2026-06-03",
-      isRecurring: true,
-      dayOfMonth: 3
-    },
-    {
-      id: "tx-4",
-      description: "Corrida de Txopela",
-      amount: 150.00,
-      type: "expense",
-      category: "Transporte",
-      account: "M-Pesa",
-      date: "2026-06-04",
-      isRecurring: false
-    }
-  ],
-  goals: [
-    {
-      title: "Reserva de Emergência",
-      targetAmount: 50000.00,
-      currentAmount: 15000.00,
-      deadline: "2026-12-31"
-    },
-    {
-      title: "Seguro de Carro",
-      targetAmount: 12000.00,
-      currentAmount: 2000.00,
-      deadline: "2026-11-30"
-    }
-  ],
-  budgetLimits: {
-    "Alimentação": 10000.00,
-    "Lazer": 5000.00
-  },
-  strategies: [
-    {
-      id: "strat-1",
-      title: "Reserva de Emergência Ativa",
-      description: "Excelente! Começou a poupar para a sua Reserva de Emergência. Para acelerar esta meta, tente reduzir 10% dos seus gastos em Lazer.",
-      type: "success"
-    }
-  ]
+  accounts: {},
+  transactions: [],
+  goals: [],
+  budgetLimits: {},
+  strategies: []
 };
 
 const SUGGESTIONS = [
