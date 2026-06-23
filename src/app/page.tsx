@@ -199,6 +199,8 @@ export default function Home() {
   // Depuração de Layout
   const [isDebugOpen, setIsDebugOpen] = useState<boolean>(false);
   const [debugInfo, setDebugInfo] = useState<string>("");
+  const [errorLogs, setErrorLogs] = useState<Array<{ timestamp: string; provider: string; model: string; message: string }>>([]);
+  const [isDebugView, setIsDebugView] = useState<"layout" | "errors">("layout");
   const [isCopied, setIsCopied] = useState<boolean>(false);
 
   // Gestão Manual de Contas
@@ -809,20 +811,21 @@ export default function Home() {
       setIsTyping(false);
       const errorDetail = err.message || String(err);
       const timestamp = new Date().toLocaleTimeString("pt-MZ");
-      const debugMsg = [
-        `[${timestamp}] ERRO na chamada à IA`,
-        `Provider: ${provider} | Modelo: ${model}`,
-        `Mensagem: ${errorDetail}`,
-      ].join("\n");
+
+      // Adiciona ao log de erros estruturado
+      setErrorLogs(prev => [...prev, {
+        timestamp,
+        provider,
+        model,
+        message: errorDetail,
+      }]);
+      setIsDebugView("errors");
 
       // Mostra erro no chat
       setMessages(prev => [
         ...prev,
         { role: "model", parts: [{ text: `Ocorreu um erro ao contactar o provider **${provider}**:\n\`${errorDetail}\`\n\nVerifica as configurações ⚙️ — chave de API e modelo seleccionado.` }] }
       ]);
-
-      // Mostra erro na área de debug
-      setDebugInfo(prev => (prev ? prev + "\n\n" : "") + debugMsg);
     }
   };
 
@@ -2349,32 +2352,84 @@ ${sessionSummary ? `\nMEMÓRIA DA CONVERSA ACTUAL:\n${sessionSummary}` : ""}`;
         <DialogContent className="bg-zinc-950 border border-zinc-800 text-zinc-50 sm:max-w-lg rounded-md shadow-lg">
           <DialogHeader>
             <DialogTitle className="font-heading text-sm font-bold text-zinc-100 flex items-center gap-2 uppercase tracking-wider">
-              <Terminal className="w-4 h-4 text-zinc-400" /> Diagnóstico de Layout
+              <Terminal className="w-4 h-4 text-zinc-400" /> Diagnóstico do Sistema
             </DialogTitle>
             <DialogDescription className="text-zinc-500 text-xs">
-              Copie os detalhes abaixo e envie-os no chat para nos ajudar a depurar o seu layout e responsividade.
+              Logs de erros e informações técnicas de layout.
             </DialogDescription>
           </DialogHeader>
 
           <div className="flex flex-col gap-3 py-2">
-            <Textarea
-              value={debugInfo}
-              readOnly
-              className="bg-zinc-900 border-zinc-800 text-zinc-300 font-mono text-[10.5px] leading-relaxed h-[300px] focus-visible:ring-0 focus-visible:ring-offset-0 rounded resize-none"
-            />
-            <p className="text-[10px] text-zinc-500">
-              *Estes detalhes incluem dados puramente visuais e técnicos sobre o ecrã e as dimensões do contentor, sem qualquer dado bancário sensível.*
-            </p>
+            {/* Abas */}
+            <div className="flex gap-1 bg-zinc-900 rounded p-1">
+              <button
+                className={`flex-1 text-[10px] font-semibold py-1 rounded transition-colors ${isDebugView === "layout" ? "bg-zinc-800 text-zinc-100" : "text-zinc-500 hover:text-zinc-300"}`}
+                onClick={() => setIsDebugView("layout")}
+              >
+                Layout
+              </button>
+              <button
+                className={`flex-1 text-[10px] font-semibold py-1 rounded transition-colors flex items-center justify-center gap-1.5 ${isDebugView === "errors" ? "bg-zinc-800 text-zinc-100" : "text-zinc-500 hover:text-zinc-300"}`}
+                onClick={() => setIsDebugView("errors")}
+              >
+                Erros do Sistema
+                {errorLogs.length > 0 && (
+                  <span className="bg-red-500 text-white text-[8px] font-bold px-1.5 py-0.5 rounded-full">{errorLogs.length}</span>
+                )}
+              </button>
+            </div>
+
+            {isDebugView === "layout" ? (
+              <>
+                <Textarea
+                  value={debugInfo}
+                  readOnly
+                  className="bg-zinc-900 border-zinc-800 text-zinc-300 font-mono text-[10.5px] leading-relaxed h-[280px] focus-visible:ring-0 focus-visible:ring-offset-0 rounded resize-none"
+                />
+                <p className="text-[10px] text-zinc-500">
+                  *Estes detalhes incluem dados puramente visuais e técnicos sobre o ecrã e as dimensões do contentor, sem qualquer dado bancário sensível.*
+                </p>
+              </>
+            ) : (
+              <div className="flex flex-col gap-2 h-[280px] overflow-y-auto">
+                {errorLogs.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-full gap-2 text-zinc-600">
+                    <Terminal className="w-8 h-8" />
+                    <p className="text-xs">Nenhum erro registado nesta sessão.</p>
+                  </div>
+                ) : (
+                  [...errorLogs].reverse().map((log, i) => (
+                    <div key={i} className="bg-zinc-900 border border-red-900/40 rounded p-2.5 flex flex-col gap-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[9px] font-bold text-red-400 uppercase tracking-wider">Erro</span>
+                        <span className="text-[9px] text-zinc-500">{log.timestamp}</span>
+                      </div>
+                      <div className="flex gap-2 text-[9px] text-zinc-400">
+                        <span>Provider: <span className="text-zinc-200">{log.provider}</span></span>
+                        <span>·</span>
+                        <span>Modelo: <span className="text-zinc-200">{log.model}</span></span>
+                      </div>
+                      <p className="text-[10px] text-zinc-300 font-mono break-all leading-relaxed mt-0.5">{log.message}</p>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
           </div>
 
           <DialogFooter className="border-t border-zinc-800 pt-4 flex sm:justify-between items-center w-full gap-2">
             <div className="text-[11px] text-zinc-400">
               {isCopied && <span className="flex items-center gap-1 text-emerald-400"><Check className="w-3.5 h-3.5" /> Copiado com sucesso!</span>}
+              {errorLogs.length > 0 && isDebugView === "errors" && (
+                <button onClick={() => setErrorLogs([])} className="text-[10px] text-zinc-500 hover:text-red-400 transition-colors">
+                  Limpar logs
+                </button>
+              )}
             </div>
             <div className="flex gap-2">
               <Button onClick={handleCopyDebug} className="bg-zinc-100 hover:bg-zinc-200 text-zinc-900 text-xs font-semibold rounded flex items-center gap-1.5">
                 {isCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                {isCopied ? "Copiado!" : "Copiar Informações"}
+                {isCopied ? "Copiado!" : "Copiar"}
               </Button>
               <Button onClick={() => setIsDebugOpen(false)} variant="outline" className="border-zinc-800 hover:bg-zinc-900 text-xs text-zinc-400">
                 Fechar

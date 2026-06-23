@@ -67,7 +67,7 @@ export const AI_PROVIDERS: ProviderConfig[] = [
     keyUrl: "https://openrouter.ai/keys",
     models: [
       { id: "meta-llama/llama-3.3-70b-instruct:free", label: "LLaMA 3.3 70B (Free)", free: true, recommended: true },
-      { id: "google/gemini-2.0-flash-exp:free",        label: "Gemini 2.0 Flash (Free)", free: true },
+      { id: "google/gemini-2.5-flash-preview:free",        label: "Gemini 2.5 Flash (Free)", free: true },
       { id: "mistralai/mistral-7b-instruct:free",      label: "Mistral 7B (Free)", free: true },
       { id: "anthropic/claude-sonnet-4-6",             label: "Claude Sonnet 4.6", free: false },
       { id: "openai/gpt-4o",                           label: "GPT-4o", free: false },
