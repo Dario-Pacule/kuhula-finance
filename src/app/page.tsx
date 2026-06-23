@@ -631,7 +631,7 @@ export default function Home() {
     setHealthCheck([...results]);
   };
 
-
+  const handleCopyDebug = () => {
     if (typeof navigator === "undefined") return;
     
     if (navigator.clipboard && navigator.clipboard.writeText) {
