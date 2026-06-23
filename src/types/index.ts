@@ -66,4 +66,6 @@ export interface ChatMessage {
     answered?: boolean;
     answeredValue?: string;
   };
+  isError?: boolean;
+  retryText?: string;
 }

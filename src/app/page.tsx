@@ -856,10 +856,15 @@ export default function Home() {
       }]);
       setIsDebugView("errors");
 
-      // Mostra erro no chat
+      // Mostra erro no chat com opção de reenvio
       setMessages(prev => [
         ...prev,
-        { role: "model", parts: [{ text: `Ocorreu um erro ao contactar o provider **${provider}**:\n\`${errorDetail}\`\n\nVerifica as configurações ⚙️ — chave de API e modelo seleccionado.` }] }
+        {
+          role: "model" as const,
+          parts: [{ text: `Ocorreu um erro ao contactar o provider **${provider}**:\n\`${errorDetail}\`\n\nVerifica as configurações ⚙️ — chave de API e modelo seleccionado.` }],
+          isError: true,
+          retryText: text,
+        }
       ]);
     }
   };
@@ -1979,18 +1984,36 @@ ${sessionSummary ? `\nCONTEXTO DA CONVERSA ACTUAL:\n${sessionSummary}` : ""}`;
                 .replace(/\*(.*?)\*/g, "<em>$1</em>");
 
               return (
-                <div 
-                  key={i} 
-                  className={`max-w-[85%] p-3.5 rounded-lg text-[12px] leading-relaxed ${
-                    isModel 
-                      ? "self-start bg-zinc-900 border border-zinc-800 text-zinc-100" 
+                <div
+                  key={i}
+                  className={`max-w-[85%] rounded-lg text-[12px] leading-relaxed ${
+                    isModel
+                      ? `self-start border ${msg.isError ? "bg-red-950/30 border-red-900/50" : "bg-zinc-900 border-zinc-800"} text-zinc-100`
                       : "self-end bg-zinc-100 text-zinc-950 shadow-sm font-medium"
                   }`}
                 >
-                  <div 
-                    dangerouslySetInnerHTML={{ __html: formattedHtml }} 
-                    className="message-content"
+                  <div
+                    dangerouslySetInnerHTML={{ __html: formattedHtml }}
+                    className="message-content p-3.5"
                   />
+                  {/* Botão de reenvio em mensagens de erro */}
+                  {msg.isError && msg.retryText && (
+                    <div className="px-3.5 pb-3 flex items-center gap-2">
+                      <button
+                        onClick={() => {
+                          // Remove a mensagem de erro e reenvia
+                          setMessages(prev => prev.filter((_, idx) => idx !== i));
+                          handleSendMessage(msg.retryText!);
+                        }}
+                        className="flex items-center gap-1.5 text-[10px] font-semibold text-red-400 hover:text-red-300 bg-red-950/40 hover:bg-red-950/60 border border-red-900/50 px-2.5 py-1 rounded-lg transition-all"
+                      >
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        Tentar novamente
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
             })}
