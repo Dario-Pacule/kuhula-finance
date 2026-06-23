@@ -108,6 +108,33 @@ const TOOL_DEFINITIONS = {
     parameters: { id: { type: "string" } },
     required: ["id"],
   },
+  askUserInput: {
+    description: `Apresenta ao utilizador uma pergunta interactiva com opções clicáveis em vez de esperar texto livre.
+Usa esta ferramenta quando precisares de uma escolha clara do utilizador, por exemplo:
+- Escolher entre contas (M-Pesa, BCI, e-Mola)
+- Confirmar uma acção (Sim/Não)
+- Escolher uma categoria de despesa
+- Seleccionar múltiplas opções em simultâneo
+- Escolher um intervalo de valor com slider
+Não uses para perguntas abertas onde qualquer texto serve.`,
+    parameters: {
+      question: { type: "string", description: "A pergunta clara a mostrar ao utilizador." },
+      type: {
+        type: "string",
+        enum: ["single", "multiple", "confirm", "slider"],
+        description: "single=escolha única, multiple=várias opções, confirm=Sim/Não, slider=valor numérico.",
+      },
+      options: {
+        type: "string",
+        description: "Opções separadas por | (ex: 'M-Pesa|BCI|e-Mola'). Não usar em confirm ou slider.",
+      },
+      sliderMin: { type: "number", description: "Valor mínimo do slider (só para type=slider)." },
+      sliderMax: { type: "number", description: "Valor máximo do slider (só para type=slider)." },
+      sliderStep: { type: "number", description: "Incremento do slider (só para type=slider)." },
+      sliderUnit: { type: "string", description: "Unidade a mostrar no slider (ex: 'MT', '%')." },
+    },
+    required: ["question", "type"],
+  },
 };
 
 // ── Helpers para construir tools por provider ────────────────

@@ -64,7 +64,8 @@ import {
 } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
-import { AppState, Goal, ChatMessage } from "@/types";
+import { AppState, Goal, ChatMessage, AskUserInputArgs } from "@/types";
+import { ChatInteractiveInput } from "@/components/ChatInteractiveInput";
 import { usePersistence, type PersistAction } from "@/hooks/usePersistence";
 import { AI_PROVIDERS, getDefaultModel, type ProviderId } from "@/lib/ai-providers";
 
@@ -748,7 +749,20 @@ export default function Home() {
     reader.readAsText(file);
   };
 
-  // Adicionar Log do Sistema
+  // Quando o utilizador responde a um input interactivo da IA
+  const handleInteractiveAnswer = (msgIndex: number, answer: string) => {
+    // Marca a mensagem como respondida
+    setMessages(prev => prev.map((m, i) =>
+      i === msgIndex && m.role === "interactive"
+        ? { ...m, interactiveInput: { ...m.interactiveInput!, answered: true, answeredValue: answer } }
+        : m
+    ));
+
+    // Envia a resposta como mensagem do utilizador para a IA continuar
+    handleSendMessage(answer);
+  };
+
+
   const addSystemLog = (text: string) => {
     const sysMsg: ChatMessage = {
       role: "system",
@@ -947,6 +961,18 @@ ${sessionSummary ? `\nMEMÓRIA DA CONVERSA ACTUAL:\n${sessionSummary}` : ""}`;
       const toolResponseParts: any[] = [];
 
       for (const tc of toolCalls) {
+        // askUserInput não muta estado — renderiza UI interactiva no chat
+        if (tc.name === "askUserInput") {
+          const interactiveMsg: ChatMessage = {
+            role: "interactive",
+            parts: [{ text: "" }],
+            interactiveInput: { args: tc.args as AskUserInputArgs },
+          };
+          setMessages(prev => [...prev, interactiveMsg]);
+          setIsTyping(false);
+          return; // Aguarda resposta do utilizador
+        }
+
         addSystemLog(`IA executou a ferramenta: **${tc.name}**`);
         const executionResult = executeToolAction(tc.name, tc.args, stateToMutate);
         stateToMutate = executionResult.newState;
@@ -1893,7 +1919,21 @@ ${sessionSummary ? `\nMEMÓRIA DA CONVERSA ACTUAL:\n${sessionSummary}` : ""}`;
             </div>
 
             {/* Balões de Mensagem Dinâmicos */}
-            {messages.filter(m => m.role === "user" || m.role === "model").map((msg, i) => {
+            {messages.filter(m => m.role === "user" || m.role === "model" || m.role === "interactive").map((msg, i) => {
+              // ── Mensagem interactiva (input da IA) ──────────────
+              if (msg.role === "interactive" && msg.interactiveInput) {
+                return (
+                  <div key={i} className="self-start w-full max-w-[90%]">
+                    <ChatInteractiveInput
+                      args={msg.interactiveInput.args}
+                      answered={msg.interactiveInput.answered}
+                      answeredValue={msg.interactiveInput.answeredValue}
+                      onAnswer={(answer) => handleInteractiveAnswer(i, answer)}
+                    />
+                  </div>
+                );
+              }
+
               const isModel = msg.role === "model";
               const text = msg.parts?.[0]?.text || "";
 

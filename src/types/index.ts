@@ -48,7 +48,22 @@ export interface ChatPart {
   };
 }
 
+export interface AskUserInputArgs {
+  question: string;
+  type: "single" | "multiple" | "confirm" | "slider";
+  options?: string;
+  sliderMin?: number;
+  sliderMax?: number;
+  sliderStep?: number;
+  sliderUnit?: string;
+}
+
 export interface ChatMessage {
-  role: 'user' | 'model' | 'system';
+  role: 'user' | 'model' | 'system' | 'interactive';
   parts: ChatPart[];
+  interactiveInput?: {
+    args: AskUserInputArgs;
+    answered?: boolean;
+    answeredValue?: string;
+  };
 }
