@@ -172,6 +172,17 @@ export default function Home() {
   const [inputValue, setInputValue] = useState<string>("");
   const [isTyping, setIsTyping] = useState<boolean>(false);
   const [isChatCollapsed, setIsChatCollapsed] = useState<boolean>(false);
+
+  // Memória de sessão: regista o que foi mencionado na conversa mas ainda não registado no painel
+  const sessionMemoryRef = useRef<{
+    mentionedIncomes: Array<{ amount: number; source: string; account?: string }>;
+    mentionedExpenses: Array<{ amount: number; description: string; account?: string }>;
+    contextNotes: string[];
+  }>({
+    mentionedIncomes: [],
+    mentionedExpenses: [],
+    contextNotes: [],
+  });
   
   const [activeTab, setActiveTab] = useState<"dashboard" | "chat" | "metrics">("dashboard");
   const [tokenStats, setTokenStats] = useState({
@@ -767,20 +778,15 @@ export default function Home() {
   const handleSendMessage = async (text: string) => {
     if (!text.trim()) return;
 
-    // Adiciona bolha de usuário na UI
-    const formattedUserMsgText = `[CONTEXTO_FINANCEIRO_ATUAL]
---- MENSAGEM DO USUÁRIO ---
-${text}`;
-
     const newHistory: ChatMessage[] = [
       ...messages,
-      { role: "user", parts: [{ text: formattedUserMsgText }] }
+      { role: "user", parts: [{ text }] }
     ];
 
-    // Atualiza chat UI
+    // Atualiza chat UI com texto limpo
     setMessages(prev => [
       ...prev,
-      { role: "user", parts: [{ text }] } // Mostra o texto limpo para o usuário
+      { role: "user", parts: [{ text }] }
     ]);
     
     setInputValue("");
@@ -825,47 +831,60 @@ ${text}`;
 
   // Chamar Rota de API
   const callChatAPI = async (history: ChatMessage[], currentState: AppState) => {
-    const systemInstruction = `Você é o Kuhula AI, um assistente e conselheiro financeiro pessoal técnico, estratégico e altamente objetivo de Moçambique.
-Sua prioridade absoluta é ajudar o usuário a organizar suas finanças de forma detalhada e consciente, focando de forma precisa em responder às suas dúvidas e comandos sem rodeios ou conversação excessiva.
+    // Construir resumo compacto do estado financeiro (optimizado para tokens)
+    const totalBalance = Object.values(currentState.accounts).reduce((a, b) => a + b, 0);
+    const recentTxs = currentState.transactions.slice(-8).map(t => ({
+      desc: t.description,
+      amt: t.amount,
+      type: t.type,
+      cat: t.category,
+      acc: t.account,
+      rec: t.isRecurring
+    }));
 
-DIRETRIZES DE COMPORTAMENTO:
-1. FOCO NA PERGUNTA E PRECISÃO: Se o usuário fizer uma pergunta ou comando, concentre-se em respondê-lo de forma direta, precisa e técnica. Evite rodeios ou introduções desnecessárias. Pense no panorama geral apenas quando for estritamente necessário para contextualizar a resposta ou quando solicitado pelo usuário.
-2. OBJETIVIDADE E PRAGMATISMO: Não seja excessivamente conversador. Seja direto, prático e sucinto. Limite suas mensagens a no máximo 2 ou 3 parágrafos curtos ou listas claras de tópicos estratégicos.
-3. ESTRATÉGIAS E PERIODICIDADE: Pense no planejamento financeiro de forma organizada em ações com diferentes frequências: diárias, semanais e mensais.
-   - Ao chamar a ferramenta 'createOrUpdateStrategy', você DEVE especificar o parâmetro 'frequency' ('daily' para tarefas diárias, 'weekly' para semanais, 'monthly' para mensais, 'one-time' para dicas pontuais) para classificar as ações recomendadas no painel.
-4. USO MODERADO DAS FERRAMENTAS: Use as ferramentas de transação, saldo, estratégia ou meta apenas após acordar a ação ou quando o usuário aceitar ou pedir explicitamente para lançar a informação no painel.
+    // Resumo de memória de sessão (o que foi dito mas pode não estar registado)
+    const mem = sessionMemoryRef.current;
+    const sessionSummary = [
+      mem.mentionedIncomes.length > 0
+        ? `Rendimentos mencionados na conversa (podem não estar todos registados): ${mem.mentionedIncomes.map(i => `${i.amount} MT de ${i.source}${i.account ? ` na conta ${i.account}` : ""}`).join("; ")}`
+        : null,
+      mem.mentionedExpenses.length > 0
+        ? `Despesas mencionadas na conversa (podem não estar todas registadas): ${mem.mentionedExpenses.map(e => `${e.amount} MT de ${e.description}${e.account ? ` via ${e.account}` : ""}`).join("; ")}`
+        : null,
+      ...mem.contextNotes
+    ].filter(Boolean).join("\n");
 
-METODOLOGIAS FINANCEIRAS:
-Você domina metodologias de finanças (como a Regra 50/30/20, o Método dos Envelopes, Pague-se a Si Próprio Primeiro, Bola de Neve para dívidas).
-Se o usuário concordar em adotar um método no chat ou pedir conselhos:
-1. Recomende o método no chat de forma simples, concisa e pragmática.
-2. Aplique-o VISUALMENTE no painel do usuário usando as ferramentas quando acordado:
-   - Use 'createOrUpdateStrategy' (configurando 'frequency') para criar cartões explicando a estratégia adotada.
-   - Use 'setBudgetLimit' para configurar limites de orçamento alinhados com o método.
-   - Use 'adjustAccountBalance' para criar 'envelopes' virtuais se o usuário adotar o Método dos Envelopes.
-   - Use 'createOrUpdateGoal' para configurar as poupanças recomendadas.
+    const systemInstruction = `És o Kuhula AI — assessor financeiro pessoal de Moçambique. O teu papel é ajudar o utilizador a organizar as suas finanças através de conversa natural, sem formulários.
 
-DETALHES DE MOÇAMBIQUE:
-- Moeda: Metical Moçambicano (símbolo: MT, ISO: MZN). Formate sempre como '1.000 MT'.
-- Carteiras Móveis: M-Pesa, e-Mola, mKesh.
-- Bancos: BCI, Millennium Bim, Standard Bank, Absa, FNB, Moza Banco.
-- Custos do dia-a-dia: Credelec, FIPAG, TV Cabo, Chapas/Txopelas.
+REGRAS DE COMPORTAMENTO:
+1. MEMÓRIA CONVERSACIONAL: Lembra-te de tudo o que o utilizador mencionou nesta conversa — rendimentos, despesas, contas, metas. Nunca peças informação que já foi dada.
+2. DISTINÇÃO CLARA: Distingue sempre entre o que o utilizador "mencionou" na conversa e o que foi efectivamente "registado" no painel. Só usa as ferramentas quando o utilizador confirmar ou pedir explicitamente para registar.
+3. EXTRACÇÃO PROACTIVA: Quando o utilizador mencionar valores (ex: "recebi 45.000 MT", "paguei 8.000 MT de renda"), extrai esses dados e pergunta se quer registá-los no painel — mas não os registes sem confirmação.
+4. RESPOSTAS CURTAS: Máximo 2-3 parágrafos ou uma lista concisa. Sem rodeios, sem introduções desnecessárias.
+5. ESTRATÉGIAS COM FREQUÊNCIA: Ao criar estratégias com 'createOrUpdateStrategy', especifica sempre 'frequency' (daily/weekly/monthly/one-time).
+6. LÍNGUA: Responde sempre em português de Moçambique. Usa "utilizador", "painel", "registar". Moeda: sempre "1.000 MT" (nunca R$ ou €).
 
-ESTADO FINANCEIRO ATUAL DO USUÁRIO EM TEMPO REAL:
-${JSON.stringify({
-    accounts: currentState.accounts,
-    goals: currentState.goals,
-    budgetLimits: currentState.budgetLimits,
-    strategies: currentState.strategies || [],
-    recentTransactions: currentState.transactions.slice(-12)
-}, null, 2)}
+METODOLOGIAS QUE DOMINAS:
+Regra 50/30/20, Método dos Envelopes, Pague-se Primeiro, Bola de Neve. Aplica-as visualmente no painel quando o utilizador concordar, usando setBudgetLimit, createOrUpdateGoal e createOrUpdateStrategy.
 
-Mantenha as suas respostas altamente técnicas, estratégicas, curtas, objetivas e em português de Moçambique.`;
+CONTEXTO DE MOÇAMBIQUE:
+- Carteiras móveis: M-Pesa, e-Mola, mKesh
+- Bancos: BCI, Millennium Bim, Standard Bank, Absa, FNB, Moza Banco
+- Despesas comuns: Credelec, FIPAG, TV Cabo, Chapas/Txopelas, Xitique
 
-    // Filtrar histórico para enviar apenas mensagens com papéis válidos e limitar aos últimos 7 turnos (14 mensagens) para controlar tokens e contexto
+ESTADO ACTUAL DO PAINEL (em tempo real):
+- Saldo total consolidado: ${totalBalance.toLocaleString("pt-MZ")} MT
+- Contas: ${JSON.stringify(currentState.accounts)}
+- Metas activas: ${JSON.stringify(currentState.goals.map(g => ({ title: g.title, target: g.targetAmount, current: g.currentAmount, deadline: g.deadline })))}
+- Limites de orçamento: ${JSON.stringify(currentState.budgetLimits)}
+- Últimas transacções: ${JSON.stringify(recentTxs)}
+${sessionSummary ? `\nMEMÓRIA DA CONVERSA ACTUAL:\n${sessionSummary}` : ""}`;
+
+    // Histórico ampliado: 30 mensagens (15 turnos) para manter contexto conversacional longo
+    // Filtra mensagens de sistema e de tool responses intermediárias para economizar tokens
     const validHistory = history
       .filter(msg => msg.role === "user" || msg.role === "model")
-      .slice(-14);
+      .slice(-30);
 
     const res = await fetch("/api/chat", {
       method: "POST",
@@ -972,8 +991,18 @@ Mantenha as suas respostas altamente técnicas, estratégicas, curtas, objetivas
 
           if (args.type === "income") {
             stateCopy.accounts[args.account] += args.amount;
+            // Regista na memória de sessão que este rendimento foi efectivamente registado
+            const mem = sessionMemoryRef.current;
+            mem.mentionedIncomes = mem.mentionedIncomes.filter(
+              i => !(i.amount === args.amount && i.source === args.description)
+            );
           } else {
             stateCopy.accounts[args.account] -= args.amount;
+            // Regista na memória de sessão que esta despesa foi efectivamente registada
+            const mem = sessionMemoryRef.current;
+            mem.mentionedExpenses = mem.mentionedExpenses.filter(
+              e => !(e.amount === args.amount && e.description === args.description)
+            );
           }
 
           stateCopy.transactions.push({
@@ -1811,12 +1840,7 @@ Mantenha as suas respostas altamente técnicas, estratégicas, curtas, objetivas
             {/* Balões de Mensagem Dinâmicos */}
             {messages.filter(m => m.role === "user" || m.role === "model").map((msg, i) => {
               const isModel = msg.role === "model";
-              let text = msg.parts?.[0]?.text || "";
-              
-              if (!isModel && text && text.includes("CONTEXTO_FINANCEIRO_ATUAL")) {
-                const parts = text.split("--- MENSAGEM DO USUÁRIO ---");
-                text = parts[1] ? parts[1].trim() : text;
-              }
+              const text = msg.parts?.[0]?.text || "";
 
               const formattedHtml = text
                 .replace(/\n\n/g, "<br/><br/>")
