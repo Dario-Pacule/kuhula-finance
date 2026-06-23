@@ -161,6 +161,14 @@ export default function Home() {
   // Hook de persistência (Supabase + localStorage fallback)
   const { persistAction, persistChatMessages, clearRemoteData } = usePersistence({
     onStateLoaded: (loadedState) => setState(loadedState),
+    onChatHistoryLoaded: (records) => {
+      // Converte ChatMessageRecord[] → ChatMessage[] (formato interno da app)
+      const chatMessages = records.map(r => ({
+        role: r.role as "user" | "model",
+        parts: [{ text: r.content }],
+      }));
+      setMessages(chatMessages);
+    },
   });
 
   // Inicialização (Client-side)
@@ -182,12 +190,6 @@ export default function Home() {
     const parsedSubmit = savedSubmit !== null ? savedSubmit === "true" : true;
     setSubmitOnEnter(parsedSubmit);
     setInputSubmitOnEnter(parsedSubmit);
-
-    // Histórico de chat (localStorage como cache rápido)
-    const savedHistory = localStorage.getItem("kuhula_chat_history");
-    if (savedHistory) {
-      try { setMessages(JSON.parse(savedHistory)); } catch {}
-    }
 
     // Estatísticas de tokens
     const savedTokenStats = localStorage.getItem("kuhula_token_stats");
@@ -231,16 +233,11 @@ export default function Home() {
   };
 
   // Persistir Histórico de Chat
-  const saveChatHistory = (newHistory: ChatMessage[]) => {
-    // Filtra só mensagens text (não tool calls) para guardar na DB
-    const textMessages = newHistory
-      .filter(m => (m.role === "user" || m.role === "model") && m.parts?.[0]?.text)
-      .slice(-2) // Só as últimas 2 mensagens (novo turno)
-      .map(m => ({ role: m.role as "user" | "model", content: m.parts[0].text! }));
-
+  const saveChatHistory = (newHistory: ChatMessage[], newMessages?: Array<{ role: "user" | "model"; content: string }>) => {
     setMessages(newHistory);
     localStorage.setItem("kuhula_chat_history", JSON.stringify(newHistory));
-    if (textMessages.length) persistChatMessages(textMessages);
+    // Guarda apenas as mensagens novas deste turno na DB (evita duplicados)
+    if (newMessages?.length) persistChatMessages(newMessages);
   };
 
   // Atualizar Estatísticas de Tokens
@@ -981,7 +978,9 @@ ${sessionSummary ? `\nMEMÓRIA DA CONVERSA ACTUAL:\n${sessionSummary}` : ""}`;
       if (secondRes.text) {
         const modelMsg: ChatMessage = { role: "model", parts: [{ text: secondRes.text }] };
         setMessages(prev => [...prev, modelMsg]);
-        saveChatHistory([...finalHistory, modelMsg]);
+        saveChatHistory([...finalHistory, modelMsg], [
+          { role: "model", content: secondRes.text },
+        ]);
       }
       if (secondRes.usage) {
         updateTokenStats(secondRes.usage.promptTokens, secondRes.usage.completionTokens);
@@ -989,7 +988,12 @@ ${sessionSummary ? `\nMEMÓRIA DA CONVERSA ACTUAL:\n${sessionSummary}` : ""}`;
     } else if (text) {
       const modelMsg: ChatMessage = { role: "model", parts: [{ text }] };
       setMessages(prev => [...prev, modelMsg]);
-      saveChatHistory([...currentHistory, modelMsg]);
+      // Guarda mensagem do utilizador + resposta da IA na DB
+      const userMsg = currentHistory[currentHistory.length - 1];
+      saveChatHistory([...currentHistory, modelMsg], [
+        ...(userMsg?.parts?.[0]?.text ? [{ role: "user" as const, content: userMsg.parts[0].text }] : []),
+        { role: "model" as const, content: text },
+      ]);
     }
   };
 

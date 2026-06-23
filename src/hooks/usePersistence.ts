@@ -3,20 +3,18 @@
 /**
  * usePersistence
  *
- * Hook que abstrai toda a lógica de persistência da app:
- * - Carrega estado inicial da DB (com fallback para localStorage)
- * - Expõe `persistAction` para operações atómicas (insert tx, upsert goal, etc.)
- * - Sincroniza automaticamente com a DB em background
- *
- * O `userId` é gerado no primeiro acesso e guardado em localStorage.
- * Quando autenticação for adicionada, basta trocar esta linha pelo
- * ID real do utilizador autenticado.
+ * - userId anónimo guardado em localStorage (persiste entre sessões no mesmo browser)
+ * - Estado financeiro: localStorage imediato + Supabase em background
+ * - Histórico de chat: localStorage imediato + Supabase completo
+ *   → Ao iniciar, carrega da DB se o localStorage estiver vazio ou desactualizado
  */
 
 import { useEffect, useRef, useCallback } from "react";
 import type { AppState, Transaction, Goal, FinancialStrategy } from "@/types";
 
-// ── Gerar/obter userId anónimo ───────────────────────────────
+// ── userId anónimo ────────────────────────────────────────────
+// Guardado em localStorage para sobreviver a recargas.
+// Substitui por auth.user.id quando adicionares autenticação.
 
 function getAnonymousUserId(): string {
   if (typeof window === "undefined") return "anon";
@@ -28,46 +26,56 @@ function getAnonymousUserId(): string {
   return id;
 }
 
-// ── Tipos de acção ───────────────────────────────────────────
+// ── Tipos de acção atómica ────────────────────────────────────
 
 export type PersistAction =
-  | { action: "upsert_account";    payload: { name: string; balance: number } }
-  | { action: "delete_account";    payload: { name: string } }
-  | { action: "insert_transaction";payload: { transaction: Transaction } }
-  | { action: "delete_transaction";payload: { id: string } }
-  | { action: "upsert_goal";       payload: { goal: Goal } }
-  | { action: "delete_goal";       payload: { title: string } }
+  | { action: "upsert_account";     payload: { name: string; balance: number } }
+  | { action: "delete_account";     payload: { name: string } }
+  | { action: "insert_transaction"; payload: { transaction: Transaction } }
+  | { action: "delete_transaction"; payload: { id: string } }
+  | { action: "upsert_goal";        payload: { goal: Goal } }
+  | { action: "delete_goal";        payload: { title: string } }
   | { action: "upsert_budget_limit";payload: { category: string; limitAmount: number } }
-  | { action: "upsert_strategy";   payload: { strategy: FinancialStrategy } }
-  | { action: "delete_strategy";   payload: { id: string } }
-  | { action: "clear_all";         payload: Record<string, never> };
+  | { action: "upsert_strategy";    payload: { strategy: FinancialStrategy } }
+  | { action: "delete_strategy";    payload: { id: string } }
+  | { action: "clear_all";          payload: Record<string, never> };
 
-// ── Hook ─────────────────────────────────────────────────────
+// ── Tipos de mensagem de chat ─────────────────────────────────
+
+export interface ChatMessageRecord {
+  role: "user" | "model";
+  content: string;
+}
+
+// ── Opções do hook ────────────────────────────────────────────
 
 interface UsePersistenceOptions {
   onStateLoaded: (state: AppState) => void;
+  onChatHistoryLoaded: (messages: ChatMessageRecord[]) => void;
 }
 
-export function usePersistence({ onStateLoaded }: UsePersistenceOptions) {
+// ── Hook ──────────────────────────────────────────────────────
+
+export function usePersistence({ onStateLoaded, onChatHistoryLoaded }: UsePersistenceOptions) {
   const userIdRef = useRef<string>("");
 
-  // Inicializa userId e carrega estado
   useEffect(() => {
     userIdRef.current = getAnonymousUserId();
     loadInitialState();
+    loadChatHistory();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ── Estado financeiro ──────────────────────────────────────
+
   const loadInitialState = async () => {
-    // 1. Carrega localStorage imediatamente (zero latência)
+    // 1. localStorage imediato
     const cached = localStorage.getItem("kuhula_state_v2");
     if (cached) {
-      try {
-        onStateLoaded(JSON.parse(cached));
-      } catch {}
+      try { onStateLoaded(JSON.parse(cached)); } catch {}
     }
 
-    // 2. Carrega DB em background e actualiza se houver dados mais recentes
+    // 2. DB em background — substitui se tiver dados
     try {
       const res = await fetch(`/api/state?userId=${userIdRef.current}`);
       if (res.ok) {
@@ -77,68 +85,82 @@ export function usePersistence({ onStateLoaded }: UsePersistenceOptions) {
           localStorage.setItem("kuhula_state_v2", JSON.stringify(state));
         }
       }
-    } catch {
-      // DB indisponível — continua com localStorage
-    }
+    } catch {}
   };
 
-  // Persiste uma acção atómica: localStorage imediato + DB em background
-  const persistAction = useCallback(
-    async (op: PersistAction, updatedState: AppState) => {
-      // Actualiza localStorage de imediato
-      localStorage.setItem("kuhula_state_v2", JSON.stringify(updatedState));
-
-      // Envia para a DB em background (não bloqueia a UI)
-      try {
-        await fetch("/api/state", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            userId: userIdRef.current,
-            ...op,
-          }),
-        });
-      } catch {
-        // Falha silenciosa — o localStorage já tem os dados
-      }
-    },
-    []
-  );
-
-  // Persiste mensagens de chat na DB
-  const persistChatMessages = useCallback(
-    async (messages: Array<{ role: "user" | "model"; content: string }>) => {
-      if (!messages.length) return;
-      try {
-        await fetch("/api/chat-history", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            userId: userIdRef.current,
-            messages,
-          }),
-        });
-      } catch {}
-    },
-    []
-  );
-
-  const clearRemoteData = useCallback(async () => {
+  const persistAction = useCallback(async (op: PersistAction, updatedState: AppState) => {
+    localStorage.setItem("kuhula_state_v2", JSON.stringify(updatedState));
     try {
       await fetch("/api/state", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: userIdRef.current,
-          action: "clear_all",
-          payload: {},
-        }),
+        body: JSON.stringify({ userId: userIdRef.current, ...op }),
       });
+    } catch {}
+  }, []);
+
+  // ── Histórico de chat ──────────────────────────────────────
+
+  const loadChatHistory = async () => {
+    // 1. localStorage imediato
+    const cached = localStorage.getItem("kuhula_chat_history");
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        // Converte do formato ChatMessage (parts[]) para ChatMessageRecord (content)
+        const records: ChatMessageRecord[] = parsed
+          .filter((m: any) => (m.role === "user" || m.role === "model") && m.parts?.[0]?.text)
+          .map((m: any) => ({ role: m.role, content: m.parts[0].text }));
+        if (records.length) onChatHistoryLoaded(records);
+      } catch {}
+    }
+
+    // 2. DB em background — fonte de verdade
+    try {
+      const res = await fetch(`/api/chat-history?userId=${userIdRef.current}&limit=100`);
+      if (res.ok) {
+        const { messages } = await res.json();
+        if (messages?.length) {
+          onChatHistoryLoaded(messages);
+          // Actualiza localStorage com o histórico completo da DB
+          const asChatMessages = messages.map((m: ChatMessageRecord) => ({
+            role: m.role,
+            parts: [{ text: m.content }],
+          }));
+          localStorage.setItem("kuhula_chat_history", JSON.stringify(asChatMessages));
+        }
+      }
+    } catch {}
+  };
+
+  // Guarda TODAS as mensagens novas (não só as últimas 2)
+  const persistChatMessages = useCallback(async (newMessages: ChatMessageRecord[]) => {
+    if (!newMessages.length) return;
+    try {
       await fetch("/api/chat-history", {
-        method: "DELETE",
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: userIdRef.current }),
+        body: JSON.stringify({ userId: userIdRef.current, messages: newMessages }),
       });
+    } catch {}
+  }, []);
+
+  // ── Limpar tudo ────────────────────────────────────────────
+
+  const clearRemoteData = useCallback(async () => {
+    try {
+      await Promise.all([
+        fetch("/api/state", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId: userIdRef.current, action: "clear_all", payload: {} }),
+        }),
+        fetch("/api/chat-history", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId: userIdRef.current }),
+        }),
+      ]);
     } catch {}
   }, []);
 
