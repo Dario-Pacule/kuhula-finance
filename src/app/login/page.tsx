@@ -1,6 +1,13 @@
 import { LoginForm } from "@/components/auth/LoginForm";
 
-export default function LoginPage() {
+interface PageProps {
+  searchParams: Promise<{ reset?: string }>;
+}
+
+export default async function LoginPage({ searchParams }: PageProps) {
+  const resolvedParams = await searchParams;
+  const isResetMode = resolvedParams.reset === "true";
+
   return (
     <div className="min-h-dvh bg-zinc-950 flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
@@ -17,7 +24,7 @@ export default function LoginPage() {
           </div>
         </div>
 
-        <LoginForm />
+        <LoginForm isResetMode={isResetMode} />
       </div>
     </div>
   );
