@@ -4,12 +4,25 @@ import { redirect } from "next/navigation";
 import { cookies, headers } from "next/headers";
 import { createServerClient } from "@/lib/supabase";
 
+function checkSupabaseConfig() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!url || url.includes("placeholder-url") || url.includes("xxxxxxxxxxxx")) {
+    return {
+      error: "O Supabase não está configurado. Por favor, configura as chaves de API (NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY) no teu ficheiro .env.local."
+    };
+  }
+  return null;
+}
+
 async function makeClient() {
   const cookieStore = await cookies();
   return createServerClient(cookieStore);
 }
 
 export async function login(formData: FormData) {
+  const configError = checkSupabaseConfig();
+  if (configError) return configError;
+
   const supabase = await makeClient();
   const { error } = await supabase.auth.signInWithPassword({
     email:    formData.get("email") as string,
@@ -20,6 +33,9 @@ export async function login(formData: FormData) {
 }
 
 export async function register(formData: FormData) {
+  const configError = checkSupabaseConfig();
+  if (configError) return configError;
+
   const supabase = await makeClient();
   const { error } = await supabase.auth.signUp({
     email:    formData.get("email") as string,
@@ -46,6 +62,9 @@ export async function getUser() {
 }
 
 export async function recoverPassword(formData: FormData) {
+  const configError = checkSupabaseConfig();
+  if (configError) return configError;
+
   const supabase = await makeClient();
   const email = formData.get("email") as string;
   
@@ -63,6 +82,9 @@ export async function recoverPassword(formData: FormData) {
 }
 
 export async function updatePassword(formData: FormData) {
+  const configError = checkSupabaseConfig();
+  if (configError) return configError;
+
   const supabase = await makeClient();
   const password = formData.get("password") as string;
 
