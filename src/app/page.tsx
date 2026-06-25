@@ -1425,8 +1425,11 @@ ${sessionSummary ? `\n### CONTEXTO DA CONVERSA ACTUAL\n${sessionSummary}` : ""}`
       if (secondRes.text) {
         const modelMsg: ChatMessage = { role: "model", parts: [{ text: secondRes.text }] };
         setMessages(prev => [...prev, modelMsg]);
-        saveChatHistory([...finalHistory, modelMsg], [
-          { role: "model", content: secondRes.text },
+        // Persiste com o histórico real (sem a mensagem interna [Sistema:])
+        const userMsg = currentHistory[currentHistory.length - 1];
+        saveChatHistory([...currentHistory, modelMsg], [
+          ...(userMsg?.parts?.[0]?.text && !userMsg.parts[0].text.startsWith("[Sistema:") ? [{ role: "user" as const, content: userMsg.parts[0].text }] : []),
+          { role: "model" as const, content: secondRes.text },
         ]);
       }
       if (secondRes.usage) {
