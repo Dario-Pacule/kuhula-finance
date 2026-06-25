@@ -27,7 +27,8 @@ import {
   CalendarDays,
   ArrowDownLeft,
   ArrowUpRight,
-  Activity
+  Activity,
+  LogOut
 } from "lucide-react";
 
 import { 
@@ -2241,6 +2242,18 @@ ${sessionSummary ? `\nCONTEXTO DA CONVERSA ACTUAL:\n${sessionSummary}` : ""}`;
             className="w-9 h-9 rounded-md border-zinc-800 hover:bg-zinc-900 text-zinc-400 hover:text-zinc-100"
           >
             <Settings className="w-4 h-4" />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={async () => {
+              const { logout } = await import("@/lib/auth");
+              await logout();
+            }}
+            className="w-9 h-9 rounded-md border-zinc-800 hover:bg-zinc-900 text-zinc-400 hover:text-red-400"
+            title="Terminar sessão"
+          >
+            <LogOut className="w-4 h-4" />
           </Button>
         </div>
       </header>

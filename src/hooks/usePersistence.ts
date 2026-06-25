@@ -3,20 +3,27 @@
 /**
  * usePersistence
  *
- * - userId anónimo guardado em localStorage (persiste entre sessões no mesmo browser)
+ * - userId vem do Supabase Auth (session real)
+ * - Fallback para UUID anónimo em localStorage se não autenticado
  * - Estado financeiro: localStorage imediato + Supabase em background
  * - Histórico de chat: localStorage imediato + Supabase completo
- *   → Ao iniciar, carrega da DB se o localStorage estiver vazio ou desactualizado
  */
 
 import { useEffect, useRef, useCallback } from "react";
+import { createBrowserClient } from "@/lib/supabase";
 import type { AppState, Transaction, Goal, FinancialStrategy } from "@/types";
 
-// ── userId anónimo ────────────────────────────────────────────
-// Guardado em localStorage para sobreviver a recargas.
-// Substitui por auth.user.id quando adicionares autenticação.
+// ── Obter userId real do Supabase Auth ───────────────────────
+// Fallback para UUID anónimo se não autenticado (modo dev)
 
-function getAnonymousUserId(): string {
+async function getUserId(): Promise<string> {
+  try {
+    const supabase = createBrowserClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user?.id) return user.id;
+  } catch {}
+
+  // Fallback anónimo (só em desenvolvimento sem auth)
   if (typeof window === "undefined") return "anon";
   let id = localStorage.getItem("kuhula_user_id");
   if (!id) {
@@ -60,9 +67,11 @@ export function usePersistence({ onStateLoaded, onChatHistoryLoaded }: UsePersis
   const userIdRef = useRef<string>("");
 
   useEffect(() => {
-    userIdRef.current = getAnonymousUserId();
-    loadInitialState();
-    loadChatHistory();
+    getUserId().then(id => {
+      userIdRef.current = id;
+      loadInitialState();
+      loadChatHistory();
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

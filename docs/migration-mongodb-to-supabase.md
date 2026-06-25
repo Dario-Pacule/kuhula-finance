@@ -108,3 +108,27 @@ POST /api/state
 { "userId": "...", "action": "insert_transaction", "payload": { "transaction": {...} } }
 ```
 → Só altera o que mudou, seguro para múltiplos dispositivos
+
+---
+
+## Configurar Autenticação no Supabase
+
+### 1. Activar Email Auth
+
+No painel Supabase → **Authentication → Providers → Email** — já está activado por omissão.
+
+### 2. Configurar URL de redireccionamento
+
+Em **Authentication → URL Configuration**:
+- **Site URL**: `https://kuhula-finance.vercel.app` (ou o teu domínio)
+- **Redirect URLs**: adicionar `https://kuhula-finance.vercel.app/auth/callback`
+
+### 3. Variável de ambiente adicional
+
+```env
+NEXT_PUBLIC_APP_URL=https://kuhula-finance.vercel.app
+```
+
+### 4. Desactivar confirmação de email (opcional, para testes)
+
+Em **Authentication → Email Templates → Confirm signup** — podes desactivar a confirmação em **Auth → Settings → Enable email confirmations** (toggle off) durante o desenvolvimento.
