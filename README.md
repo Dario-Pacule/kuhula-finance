@@ -190,3 +190,37 @@ git merge improve/supabase-persistence
 ## Licença
 
 MIT
+
+---
+
+## Migrations automáticas
+
+O projecto usa **Drizzle ORM** para gerir o schema da DB. As migrations correm automaticamente no arranque do servidor via `instrumentation.ts`.
+
+### Configurar
+
+Adiciona ao `.env.local` (e às variáveis de ambiente da Vercel):
+
+```env
+# Supabase Dashboard → Settings → Database → Connection string (Direct)
+DATABASE_URL=postgresql://postgres.[ref]:[password]@aws-0-eu-west-2.pooler.supabase.com:5432/postgres
+```
+
+Ou só a password (o URL é construído automaticamente):
+```env
+SUPABASE_DB_PASSWORD=your-database-password
+```
+
+### Como funciona
+
+1. No arranque, `instrumentation.ts` chama `runMigrations()`
+2. Cria a tabela `kuhula_migrations` se não existir
+3. Verifica quais ficheiros em `src/db/migrations/` ainda não foram aplicados
+4. Aplica cada ficheiro por ordem e regista na tabela de controlo
+5. Re-executar é seguro — migrations já aplicadas são ignoradas
+
+### Adicionar uma nova migration
+
+1. Altera `src/db/schema.ts`
+2. Cria `src/db/migrations/0002_nome_descritivo.sql` com o SQL de alteração
+3. Faz deploy — a migration corre automaticamente

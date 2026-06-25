@@ -1,7 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Activa o instrumentation.ts para correr migrations no arranque
+  experimental: {
+    instrumentationHook: true,
+  },
 };
 
 export default nextConfig;
