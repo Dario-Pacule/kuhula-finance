@@ -8,8 +8,8 @@ import { createBrowserClient as _createBrowserClient, createServerClient as _cre
 import { createClient } from "@supabase/supabase-js";
 import type { NextRequest, NextResponse } from "next/server";
 
-const url  = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const url  = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder-url.supabase.co";
+const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-anon-key";
 
 // ── Browser (client components) ───────────────────────────────
 export function createBrowserClient() {
