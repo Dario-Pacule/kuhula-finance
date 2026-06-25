@@ -2384,7 +2384,10 @@ ${sessionSummary ? `\n### CONTEXTO DA CONVERSA ACTUAL\n${sessionSummary}` : ""}`
                   if (m.role === "interactive") return true;
                   if (m.role === "user" || m.role === "model") {
                     const text = m.parts?.[0]?.text || "";
-                    return text.trim() !== "";
+                    if (text.trim() === "") return false;
+                    // Oculta mensagens internas do sistema (injectadas para controlar a IA)
+                    if (text.startsWith("[Sistema:")) return false;
+                    return true;
                   }
                   return false;
                 })
