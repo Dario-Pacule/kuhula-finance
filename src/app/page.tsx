@@ -162,32 +162,33 @@ export default function Home() {
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
 
   // Hook de persistência (Supabase + localStorage fallback)
-  const { persistAction, persistChatMessages, clearRemoteData } = usePersistence({
+  const { persistAction, persistChatMessages, saveAiConfig, clearRemoteData } = usePersistence({
     onStateLoaded: (loadedState) => setState(loadedState),
     onChatHistoryLoaded: (records) => {
-      // Converte ChatMessageRecord[] → ChatMessage[] (formato interno da app)
       const chatMessages = records.map(r => ({
         role: r.role as "user" | "model",
         parts: [{ text: r.content }],
       }));
       setMessages(chatMessages);
     },
+    onAiConfigLoaded: (config) => {
+      setProvider(config.provider as ProviderId);
+      setModel(config.model);
+      setClientApiKey(config.apiKey);
+      setInputProvider(config.provider as ProviderId);
+      setInputModel(config.model);
+      setInputApiKey(config.apiKey);
+      if (config.submitOnEnter !== undefined) {
+        setSubmitOnEnter(config.submitOnEnter);
+        setInputSubmitOnEnter(config.submitOnEnter);
+      }
+    },
   });
 
   // Inicialização (Client-side)
   useEffect(() => {
-    // Estado financeiro — gerido pelo usePersistence hook (já carrega automaticamente)
-
-    // Configurações de IA
-    const savedProvider = (localStorage.getItem("kuhula_provider") || "gemini") as ProviderId;
-    const savedModel = localStorage.getItem("kuhula_model") || getDefaultModel(savedProvider);
-    const savedKey = localStorage.getItem(`kuhula_key_${savedProvider}`) || "";
-    setProvider(savedProvider);
-    setModel(savedModel);
-    setClientApiKey(savedKey);
-    setInputProvider(savedProvider);
-    setInputModel(savedModel);
-    setInputApiKey(savedKey);
+    // Config de IA, estado financeiro e histórico de chat
+    // são carregados pelo usePersistence hook automaticamente.
 
     const savedSubmit = localStorage.getItem("kuhula_submit_on_enter");
     const parsedSubmit = savedSubmit !== null ? savedSubmit === "true" : true;
@@ -687,10 +688,15 @@ export default function Home() {
     setModel(inputModel);
     setClientApiKey(inputApiKey);
     setSubmitOnEnter(inputSubmitOnEnter);
-    localStorage.setItem("kuhula_provider", inputProvider);
-    localStorage.setItem("kuhula_model", inputModel);
-    localStorage.setItem(`kuhula_key_${inputProvider}`, inputApiKey);
-    localStorage.setItem("kuhula_submit_on_enter", inputSubmitOnEnter ? "true" : "false");
+
+    // Guarda na DB (sincroniza entre dispositivos)
+    saveAiConfig({
+      provider: inputProvider,
+      model: inputModel,
+      apiKey: inputApiKey,
+      submitOnEnter: inputSubmitOnEnter,
+    });
+
     setIsSettingsOpen(false);
     addSystemLog(`Configurações actualizadas — Provider: ${inputProvider}, Modelo: ${inputModel}`);
   };

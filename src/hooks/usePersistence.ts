@@ -33,6 +33,13 @@ async function getUserId(): Promise<string> {
   return id;
 }
 
+export interface AiConfig {
+  provider: string;
+  model: string;
+  apiKey: string;
+  submitOnEnter: boolean;
+}
+
 // ── Tipos de acção atómica ────────────────────────────────────
 
 export type PersistAction =
@@ -59,11 +66,12 @@ export interface ChatMessageRecord {
 interface UsePersistenceOptions {
   onStateLoaded: (state: AppState) => void;
   onChatHistoryLoaded: (messages: ChatMessageRecord[]) => void;
+  onAiConfigLoaded: (config: AiConfig) => void;
 }
 
 // ── Hook ──────────────────────────────────────────────────────
 
-export function usePersistence({ onStateLoaded, onChatHistoryLoaded }: UsePersistenceOptions) {
+export function usePersistence({ onStateLoaded, onChatHistoryLoaded, onAiConfigLoaded }: UsePersistenceOptions) {
   const userIdRef = useRef<string>("");
 
   useEffect(() => {
@@ -71,6 +79,7 @@ export function usePersistence({ onStateLoaded, onChatHistoryLoaded }: UsePersis
       userIdRef.current = id;
       loadInitialState();
       loadChatHistory();
+      loadAiConfig();
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -104,6 +113,41 @@ export function usePersistence({ onStateLoaded, onChatHistoryLoaded }: UsePersis
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId: userIdRef.current, ...op }),
+      });
+    } catch {}
+  }, []);
+
+  // ── Config de IA ───────────────────────────────────────────
+
+  const loadAiConfig = async () => {
+    // 1. localStorage imediato
+    const cached = localStorage.getItem("kuhula_ai_config");
+    if (cached) {
+      try { onAiConfigLoaded(JSON.parse(cached)); } catch {}
+    }
+
+    // 2. DB em background — fonte de verdade
+    try {
+      const res = await fetch(`/api/ai-config?userId=${userIdRef.current}`);
+      if (res.ok) {
+        const { config } = await res.json();
+        if (config?.provider) {
+          onAiConfigLoaded(config);
+          localStorage.setItem("kuhula_ai_config", JSON.stringify(config));
+        }
+      }
+    } catch {}
+  };
+
+  const saveAiConfig = useCallback(async (config: AiConfig) => {
+    // localStorage imediato
+    localStorage.setItem("kuhula_ai_config", JSON.stringify(config));
+    // DB em background
+    try {
+      await fetch("/api/ai-config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: userIdRef.current, ...config }),
       });
     } catch {}
   }, []);
@@ -177,6 +221,7 @@ export function usePersistence({ onStateLoaded, onChatHistoryLoaded }: UsePersis
     userId: userIdRef,
     persistAction,
     persistChatMessages,
+    saveAiConfig,
     clearRemoteData,
   };
 }
