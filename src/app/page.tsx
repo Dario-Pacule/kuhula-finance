@@ -28,7 +28,10 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
   Activity,
-  LogOut
+  LogOut,
+  Cloud,
+  CloudOff,
+  Loader2
 } from "lucide-react";
 
 import { 
@@ -70,7 +73,7 @@ import { log } from "@/lib/logger";
 import { ChatInteractiveInput } from "@/components/ChatInteractiveInput";
 import { RichChatInput } from "@/components/RichChatInput";
 import { RuntimeLogsPanel } from "@/components/RuntimeLogsPanel";
-import { usePersistence, type PersistAction } from "@/hooks/usePersistence";
+import { usePersistence, type PersistAction, type SyncStatus } from "@/hooks/usePersistence";
 import { AI_PROVIDERS, getDefaultModel, type ProviderId } from "@/lib/ai-providers";
 
 const DEFAULT_STATE: AppState = {
@@ -91,6 +94,11 @@ const SUGGESTIONS = [
 export default function Home() {
   // Estado Financeiro
   const [state, setState] = useState<AppState>(DEFAULT_STATE);
+  
+  // Estados de Sincronização e Carregamento
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>("synced");
+  const [isChatHistoryLoading, setIsChatHistoryLoading] = useState<boolean>(true);
+  const [isSavingSettings, setIsSavingSettings] = useState<boolean>(false);
   
   // Estado IA — multi-provider
   const [provider, setProvider] = useState<ProviderId>("gemini");
@@ -185,6 +193,8 @@ export default function Home() {
         setInputSubmitOnEnter(config.submitOnEnter);
       }
     },
+    onSyncStatusChange: (status) => setSyncStatus(status),
+    onChatHistoryLoadComplete: () => setIsChatHistoryLoading(false),
   });
 
   // Inicialização (Client-side)
@@ -685,24 +695,31 @@ export default function Home() {
   ]));
 
   // Configurações de IA — multi-provider
-  const handleSaveSettings = () => {
-    setProvider(inputProvider);
-    setModel(inputModel);
-    setClientApiKey(inputApiKey);
-    setSubmitOnEnter(inputSubmitOnEnter);
+  const handleSaveSettings = async () => {
+    setIsSavingSettings(true);
+    try {
+      setProvider(inputProvider);
+      setModel(inputModel);
+      setClientApiKey(inputApiKey);
+      setSubmitOnEnter(inputSubmitOnEnter);
 
-    // Guarda na DB (sincroniza entre dispositivos)
-    saveAiConfig({
-      provider: inputProvider,
-      model: inputModel,
-      apiKey: inputApiKey,
-      submitOnEnter: inputSubmitOnEnter,
-    });
+      // Guarda na DB (sincroniza entre dispositivos)
+      await saveAiConfig({
+        provider: inputProvider,
+        model: inputModel,
+        apiKey: inputApiKey,
+        submitOnEnter: inputSubmitOnEnter,
+      });
 
-    log.info("ai-config", `Configurações guardadas`, { provider: inputProvider, model: inputModel, hasKey: !!inputApiKey });
+      log.info("ai-config", `Configurações guardadas`, { provider: inputProvider, model: inputModel, hasKey: !!inputApiKey });
 
-    setIsSettingsOpen(false);
-    addSystemLog(`Configurações actualizadas — Provider: ${inputProvider}, Modelo: ${inputModel}`);
+      setIsSettingsOpen(false);
+      addSystemLog(`Configurações actualizadas — Provider: ${inputProvider}, Modelo: ${inputModel}`);
+    } catch (e: any) {
+      log.error("ai-config", "Erro ao guardar configurações", e?.message);
+    } finally {
+      setIsSavingSettings(false);
+    }
   };
 
   // Quando o provider muda no modal, actualiza o modelo e a chave para os defaults desse provider
@@ -774,6 +791,33 @@ export default function Home() {
     handleSendMessage(answer);
   };
 
+
+  const renderSyncStatus = () => {
+    switch (syncStatus) {
+      case "syncing":
+        return (
+          <div className="flex items-center gap-1.5 px-2.5 py-1 bg-zinc-900 border border-zinc-800 rounded-md text-[10px] text-zinc-400 select-none" title="A sincronizar com a base de dados...">
+            <Loader2 className="w-3.5 h-3.5 animate-spin text-zinc-400" />
+            <span className="hidden sm:inline">A sincronizar...</span>
+          </div>
+        );
+      case "error":
+        return (
+          <div className="flex items-center gap-1.5 px-2.5 py-1 bg-red-950/20 border border-red-900/50 rounded-md text-[10px] text-rose-400 select-none" title="Erro na sincronização com o Supabase">
+            <CloudOff className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Erro de ligação</span>
+          </div>
+        );
+      case "synced":
+      default:
+        return (
+          <div className="flex items-center gap-1.5 px-2.5 py-1 bg-zinc-900/40 border border-zinc-800/40 rounded-md text-[10px] text-emerald-500 select-none" title="Todos os dados sincronizados na nuvem">
+            <Cloud className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Sincronizado</span>
+          </div>
+        );
+    }
+  };
 
   const addSystemLog = (text: string) => {
     const sysMsg: ChatMessage = {
@@ -2063,64 +2107,72 @@ ${sessionSummary ? `\nCONTEXTO DA CONVERSA ACTUAL:\n${sessionSummary}` : ""}`;
             </div>
 
             {/* Balões de Mensagem Dinâmicos */}
-            {messages.filter(m => m.role === "user" || m.role === "model" || m.role === "interactive").map((msg, i) => {
-              // ── Mensagem interactiva (input da IA) ──────────────
-              if (msg.role === "interactive" && msg.interactiveInput) {
+            {isChatHistoryLoading && messages.length === 0 ? (
+              <div className="flex flex-col gap-3.5 mt-2">
+                <div className="self-start w-[70%] h-12 bg-zinc-900/50 border border-zinc-800/40 rounded-lg animate-pulse" />
+                <div className="self-end w-[50%] h-8 bg-zinc-800/50 rounded-lg animate-pulse" />
+                <div className="self-start w-[80%] h-16 bg-zinc-900/50 border border-zinc-800/40 rounded-lg animate-pulse" />
+              </div>
+            ) : (
+              messages.filter(m => m.role === "user" || m.role === "model" || m.role === "interactive").map((msg, i) => {
+                // ── Mensagem interactiva (input da IA) ──────────────
+                if (msg.role === "interactive" && msg.interactiveInput) {
+                  return (
+                    <div key={i} className="self-start w-full max-w-[90%]">
+                      <ChatInteractiveInput
+                        args={msg.interactiveInput.args}
+                        answered={msg.interactiveInput.answered}
+                        answeredValue={msg.interactiveInput.answeredValue}
+                        onAnswer={(answer) => handleInteractiveAnswer(i, answer)}
+                      />
+                    </div>
+                  );
+                }
+
+                const isModel = msg.role === "model";
+                const text = msg.parts?.[0]?.text || "";
+
+                const formattedHtml = text
+                  .replace(/\n\n/g, "<br/><br/>")
+                  .replace(/\n/g, "<br/>")
+                  .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+                  .replace(/\*(.*?)\*/g, "<em>$1</em>");
+
                 return (
-                  <div key={i} className="self-start w-full max-w-[90%]">
-                    <ChatInteractiveInput
-                      args={msg.interactiveInput.args}
-                      answered={msg.interactiveInput.answered}
-                      answeredValue={msg.interactiveInput.answeredValue}
-                      onAnswer={(answer) => handleInteractiveAnswer(i, answer)}
+                  <div
+                    key={i}
+                    className={`max-w-[85%] rounded-lg text-[12px] leading-relaxed ${
+                      isModel
+                        ? `self-start border ${msg.isError ? "bg-red-950/30 border-red-900/50" : "bg-zinc-900 border-zinc-800"} text-zinc-100`
+                        : "self-end bg-zinc-100 text-zinc-950 shadow-sm font-medium"
+                    }`}
+                  >
+                    <div
+                      dangerouslySetInnerHTML={{ __html: formattedHtml }}
+                      className="message-content p-3.5"
                     />
+                    {/* Botão de reenvio em mensagens de erro */}
+                    {msg.isError && msg.retryText && (
+                      <div className="px-3.5 pb-3 flex items-center gap-2">
+                        <button
+                          onClick={() => {
+                            // Remove a mensagem de erro e reenvia
+                            setMessages(prev => prev.filter((_, idx) => idx !== i));
+                            handleSendMessage(msg.retryText!);
+                          }}
+                          className="flex items-center gap-1.5 text-[10px] font-semibold text-red-400 hover:text-red-300 bg-red-950/40 hover:bg-red-950/60 border border-red-900/50 px-2.5 py-1 rounded-lg transition-all"
+                        >
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                          </svg>
+                          Tentar novamente
+                        </button>
+                      </div>
+                    )}
                   </div>
                 );
-              }
-
-              const isModel = msg.role === "model";
-              const text = msg.parts?.[0]?.text || "";
-
-              const formattedHtml = text
-                .replace(/\n\n/g, "<br/><br/>")
-                .replace(/\n/g, "<br/>")
-                .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
-                .replace(/\*(.*?)\*/g, "<em>$1</em>");
-
-              return (
-                <div
-                  key={i}
-                  className={`max-w-[85%] rounded-lg text-[12px] leading-relaxed ${
-                    isModel
-                      ? `self-start border ${msg.isError ? "bg-red-950/30 border-red-900/50" : "bg-zinc-900 border-zinc-800"} text-zinc-100`
-                      : "self-end bg-zinc-100 text-zinc-950 shadow-sm font-medium"
-                  }`}
-                >
-                  <div
-                    dangerouslySetInnerHTML={{ __html: formattedHtml }}
-                    className="message-content p-3.5"
-                  />
-                  {/* Botão de reenvio em mensagens de erro */}
-                  {msg.isError && msg.retryText && (
-                    <div className="px-3.5 pb-3 flex items-center gap-2">
-                      <button
-                        onClick={() => {
-                          // Remove a mensagem de erro e reenvia
-                          setMessages(prev => prev.filter((_, idx) => idx !== i));
-                          handleSendMessage(msg.retryText!);
-                        }}
-                        className="flex items-center gap-1.5 text-[10px] font-semibold text-red-400 hover:text-red-300 bg-red-950/40 hover:bg-red-950/60 border border-red-900/50 px-2.5 py-1 rounded-lg transition-all"
-                      >
-                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                        </svg>
-                        Tentar novamente
-                      </button>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+              })
+            )}
 
             {/* Indicador de Digitação */}
             {isTyping && (
@@ -2225,6 +2277,7 @@ ${sessionSummary ? `\nCONTEXTO DA CONVERSA ACTUAL:\n${sessionSummary}` : ""}`;
 
         {/* Ações do Cabeçalho */}
         <div className="flex items-center gap-2">
+          {renderSyncStatus()}
           {/* Botão de abrir chat visível no Desktop quando colapsado */}
           {isChatCollapsed && (
             <Button
@@ -2498,11 +2551,18 @@ ${sessionSummary ? `\nCONTEXTO DA CONVERSA ACTUAL:\n${sessionSummary}` : ""}`;
           </ScrollArea>
 
           <DialogFooter className="mx-0 mb-0 mt-0 border-t border-zinc-800 bg-zinc-900/30 px-6 py-4 flex-shrink-0" style={{ display: "flex", flexDirection: "row", justifyContent: "flex-end", gap: "0.5rem", alignItems: "center" }}>
-            <Button onClick={() => setIsSettingsOpen(false)} variant="ghost" className="text-xs text-zinc-400 hover:bg-zinc-800">
+            <Button onClick={() => setIsSettingsOpen(false)} variant="ghost" className="text-xs text-zinc-400 hover:bg-zinc-800" disabled={isSavingSettings}>
               Cancelar
             </Button>
-            <Button onClick={handleSaveSettings} className="bg-zinc-100 hover:bg-zinc-200 text-zinc-900 text-xs font-semibold rounded">
-              Salvar Configurações
+            <Button onClick={handleSaveSettings} className="bg-zinc-100 hover:bg-zinc-200 text-zinc-900 text-xs font-semibold rounded flex items-center justify-center gap-1.5" disabled={isSavingSettings}>
+              {isSavingSettings ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  A guardar...
+                </>
+              ) : (
+                "Salvar Configurações"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
