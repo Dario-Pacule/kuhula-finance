@@ -6,7 +6,7 @@
  */
 
 import { supabaseAdmin } from "./supabase";
-import type { AppState, Transaction, Goal, FinancialStrategy } from "@/types";
+import type { AppState, Transaction, Goal, FinancialStrategy, UserProfile } from "@/types";
 
 // ─────────────────────────────────────────────
 // TIPOS INTERNOS DA DB
@@ -60,12 +60,18 @@ interface DbStrategy {
   frequency: "daily" | "weekly" | "monthly" | "one-time" | null;
 }
 
+interface DbUserProfile {
+  user_id: string;
+  profile_json: UserProfile;
+  updated_at: string;
+}
+
 // ─────────────────────────────────────────────
 // LOAD — lê todo o estado do utilizador da DB
 // ─────────────────────────────────────────────
 
 export async function loadUserState(userId: string): Promise<AppState | null> {
-  const [accounts, transactions, goals, budgetLimits, strategies] =
+  const [accounts, transactions, goals, budgetLimits, strategies, profileResult] =
     await Promise.all([
       supabaseAdmin
         .from("accounts")
@@ -92,6 +98,11 @@ export async function loadUserState(userId: string): Promise<AppState | null> {
         .select("*")
         .eq("user_id", userId)
         .order("created_at"),
+      supabaseAdmin
+        .from("user_profiles")
+        .select("profile_json")
+        .eq("user_id", userId)
+        .maybeSingle(),
     ]);
 
   // Se qualquer query falhou, retorna null para o frontend usar o localStorage
@@ -151,6 +162,7 @@ export async function loadUserState(userId: string): Promise<AppState | null> {
       actionLabel: s.action_label ?? undefined,
       frequency: s.frequency ?? undefined,
     })),
+    userProfile: (profileResult.data as DbUserProfile | null)?.profile_json ?? undefined,
   };
 }
 
@@ -380,6 +392,38 @@ export async function clearChatHistory(userId: string) {
     .from("chat_messages")
     .delete()
     .eq("user_id", userId);
+}
+
+// ─────────────────────────────────────────────
+// USER PROFILE
+// ─────────────────────────────────────────────
+
+export async function upsertUserProfile(
+  userId: string,
+  profile: Partial<UserProfile>
+) {
+  // Merge com o perfil existente para não sobrescrever campos não enviados
+  const { data: existing } = await supabaseAdmin
+    .from("user_profiles")
+    .select("profile_json")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  const merged: UserProfile = {
+    ...(existing?.profile_json ?? {}),
+    ...profile,
+    lastUpdated: new Date().toISOString(),
+  };
+
+  const { error } = await supabaseAdmin
+    .from("user_profiles")
+    .upsert(
+      { user_id: userId, profile_json: merged, updated_at: new Date().toISOString() },
+      { onConflict: "user_id" }
+    );
+
+  if (error) throw error;
+  return merged;
 }
 
 // ─────────────────────────────────────────────

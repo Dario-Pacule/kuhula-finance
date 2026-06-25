@@ -3,7 +3,7 @@
 import { useEffect, useRef, useCallback } from "react";
 import { createBrowserClient } from "@/lib/supabase";
 import { log } from "@/lib/logger";
-import type { AppState, Transaction, Goal, FinancialStrategy } from "@/types";
+import type { AppState, Transaction, Goal, FinancialStrategy, UserProfile } from "@/types";
 
 async function getUserId(): Promise<string> {
   try {
@@ -33,16 +33,17 @@ export interface AiConfig {
 }
 
 export type PersistAction =
-  | { action: "upsert_account";     payload: { name: string; balance: number } }
-  | { action: "delete_account";     payload: { name: string } }
-  | { action: "insert_transaction"; payload: { transaction: Transaction } }
-  | { action: "delete_transaction"; payload: { id: string } }
-  | { action: "upsert_goal";        payload: { goal: Goal } }
-  | { action: "delete_goal";        payload: { title: string } }
-  | { action: "upsert_budget_limit";payload: { category: string; limitAmount: number } }
-  | { action: "upsert_strategy";    payload: { strategy: FinancialStrategy } }
-  | { action: "delete_strategy";    payload: { id: string } }
-  | { action: "clear_all";          payload: Record<string, never> };
+  | { action: "upsert_account";       payload: { name: string; balance: number } }
+  | { action: "delete_account";       payload: { name: string } }
+  | { action: "insert_transaction";   payload: { transaction: Transaction } }
+  | { action: "delete_transaction";   payload: { id: string } }
+  | { action: "upsert_goal";          payload: { goal: Goal } }
+  | { action: "delete_goal";          payload: { title: string } }
+  | { action: "upsert_budget_limit";  payload: { category: string; limitAmount: number } }
+  | { action: "upsert_strategy";      payload: { strategy: FinancialStrategy } }
+  | { action: "delete_strategy";      payload: { id: string } }
+  | { action: "update_user_profile";  payload: { profile: Partial<UserProfile> } }
+  | { action: "clear_all";            payload: Record<string, never> };
 
 export interface ChatMessageRecord {
   role: "user" | "model";

@@ -28,12 +28,29 @@ export interface FinancialStrategy {
   frequency?: 'daily' | 'weekly' | 'monthly' | 'one-time';
 }
 
+/**
+ * Perfil persistente do utilizador — aprendido pelo agente ao longo das conversas.
+ * O agente preenche este perfil gradualmente usando a ferramenta updateUserProfile.
+ */
+export interface UserProfile {
+  name?: string;
+  occupation?: string;
+  monthlyIncome?: number;
+  incomeDay?: number;         // Dia do mês em que recebe o salário
+  familySize?: number;        // Nº de dependentes financeiros
+  primaryAccounts?: string[]; // Contas que usa habitualmente
+  financialGoalNarrative?: string; // Resumo dos objectivos financeiros
+  behaviorNotes?: string;     // Padrões de comportamento observados pelo agente
+  lastUpdated?: string;       // ISO date da última actualização
+}
+
 export interface AppState {
   accounts: Record<string, number>;
   transactions: Transaction[];
   goals: Goal[];
   budgetLimits: Record<string, number>;
   strategies?: FinancialStrategy[];
+  userProfile?: UserProfile;
 }
 
 export interface ChatPart {
@@ -68,4 +85,6 @@ export interface ChatMessage {
   };
   isError?: boolean;
   retryText?: string;
+  /** Marcado em mensagens interactivas que representam uma confirmação de operação financeira */
+  isPendingFinancial?: boolean;
 }

@@ -3,7 +3,7 @@ import { getAuthenticatedUserId } from "@/lib/auth-server";
 import {
   loadUserState, upsertAccount, deleteAccount,
   insertTransaction, deleteTransaction, upsertGoal, deleteGoal,
-  upsertBudgetLimit, upsertStrategy, deleteStrategy,
+  upsertBudgetLimit, upsertStrategy, deleteStrategy, upsertUserProfile,
 } from "@/lib/db";
 import { supabaseAdmin } from "@/lib/supabase";
 
@@ -51,6 +51,7 @@ export async function POST(req: Request) {
       case "upsert_budget_limit":  await upsertBudgetLimit(userId, payload.category, payload.limitAmount); break;
       case "upsert_strategy":      await upsertStrategy(userId, payload.strategy); break;
       case "delete_strategy":      await deleteStrategy(userId, payload.id); break;
+      case "update_user_profile":  await upsertUserProfile(userId, payload.profile); break;
       case "clear_all":
         await Promise.all([
           supabaseAdmin.from("transactions").delete().eq("user_id", userId),
@@ -59,6 +60,7 @@ export async function POST(req: Request) {
           supabaseAdmin.from("budget_limits").delete().eq("user_id", userId),
           supabaseAdmin.from("strategies").delete().eq("user_id", userId),
           supabaseAdmin.from("chat_messages").delete().eq("user_id", userId),
+          supabaseAdmin.from("user_profiles").delete().eq("user_id", userId),
         ]);
         break;
       default:

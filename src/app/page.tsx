@@ -84,6 +84,19 @@ const DEFAULT_STATE: AppState = {
   strategies: []
 };
 
+/** Ferramentas que alteram dados financeiros — requerem confirmação visual do utilizador */
+const FINANCIAL_TOOLS = new Set([
+  "addTransaction",
+  "deleteTransaction",
+  "adjustAccountBalance",
+  "deleteAccount",
+  "createOrUpdateGoal",
+  "deleteGoal",
+  "setBudgetLimit",
+  "createOrUpdateStrategy",
+  "deleteStrategy",
+]);
+
 const SUGGESTIONS = [
   "Tenho 50.000 MT na conta do BCI e 8.000 MT no M-Pesa",
   "Recebi o meu salário de 45.000 MT na conta bancária",
@@ -99,6 +112,13 @@ export default function Home() {
   const [syncStatus, setSyncStatus] = useState<SyncStatus>("synced");
   const [isChatHistoryLoading, setIsChatHistoryLoading] = useState<boolean>(true);
   const [isSavingSettings, setIsSavingSettings] = useState<boolean>(false);
+
+  // Confirmação pendente de operação financeira (interceptada antes da execução)
+  const [pendingConfirmation, setPendingConfirmation] = useState<{
+    toolCalls: Array<{ name: string; args: any }>;
+    history: ChatMessage[];
+    appState: AppState;
+  } | null>(null);
   
   // Estado IA — multi-provider
   const [provider, setProvider] = useState<ProviderId>("gemini");
@@ -148,6 +168,7 @@ export default function Home() {
     totalTokens: 0
   });
   const [isMobile, setIsMobile] = useState<boolean>(false);
+  const [isMounted, setIsMounted] = useState<boolean>(false);
 
   // Depuração de Layout
   const [isDebugOpen, setIsDebugOpen] = useState<boolean>(false);
@@ -217,6 +238,7 @@ export default function Home() {
     setSubmitOnEnter(parsedSubmit);
     setInputSubmitOnEnter(parsedSubmit);
 
+
     // Estatísticas de tokens
     const savedTokenStats = localStorage.getItem("kuhula_token_stats");
     if (savedTokenStats) {
@@ -227,6 +249,9 @@ export default function Home() {
     const checkMobile = () => setIsMobile(window.innerWidth < 1024);
     checkMobile();
     window.addEventListener("resize", checkMobile);
+    
+    setIsMounted(true);
+    
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
 
@@ -797,8 +822,14 @@ export default function Home() {
         : m
     ));
 
-    // Envia a resposta como mensagem do utilizador para a IA continuar
-    handleSendMessage(answer);
+    // Se é uma confirmação de operação financeira, encaminha para o handler próprio
+    const msg = messages[msgIndex];
+    if (msg?.isPendingFinancial) {
+      handleFinancialConfirmation(answer === "Sim");
+    } else {
+      // Envia a resposta como mensagem do utilizador para a IA continuar
+      handleSendMessage(answer);
+    }
   };
 
 
@@ -864,6 +895,8 @@ export default function Home() {
   // Enviar Mensagem para o Gemini
   const handleSendMessage = async (text: string) => {
     if (!text.trim()) return;
+
+    log.info("chat", "Mensagem enviada", { text: text.substring(0, 100) + (text.length > 100 ? "..." : "") });
 
     const newHistory: ChatMessage[] = [
       ...messages,
@@ -936,18 +969,77 @@ export default function Home() {
 
   // Chamar Rota de API
   const callChatAPI = async (history: ChatMessage[], currentState: AppState) => {
-    // Construir resumo compacto do estado financeiro (optimizado para tokens)
+    // ── Restaurar memória de sessão do localStorage se ainda não foi feita esta sessão ──
+    if (typeof window !== "undefined" && !sessionMemoryRef.current.mentionedIncomes.length &&
+        !sessionMemoryRef.current.mentionedExpenses.length) {
+      const savedMem = localStorage.getItem("kuhula_session_memory");
+      if (savedMem) {
+        try {
+          const parsed = JSON.parse(savedMem);
+          sessionMemoryRef.current = {
+            mentionedIncomes: parsed.mentionedIncomes ?? [],
+            mentionedExpenses: parsed.mentionedExpenses ?? [],
+            contextNotes: parsed.contextNotes ?? [],
+          };
+        } catch { /* ignora erros de parse */ }
+      }
+    }
+
+    // ── Saldos por conta ──
     const totalBalance = Object.values(currentState.accounts).reduce((a, b) => a + b, 0);
-    const recentTxs = currentState.transactions.slice(-8).map(t => ({
-      desc: t.description,
-      amt: t.amount,
-      type: t.type,
-      cat: t.category,
-      acc: t.account,
-      rec: t.isRecurring
+
+    // ── Mês actual e últimos 3 meses ──
+    const now = new Date();
+    const currentMonth = now.toISOString().substring(0, 7);
+
+    // Agrega despesas por categoria (mês actual)
+    const expensesByCategory: Record<string, number> = {};
+    const incomeBySource: Record<string, number> = {};
+    currentState.transactions.forEach(t => {
+      if (!t.date.startsWith(currentMonth)) return;
+      if (t.type === "expense") {
+        expensesByCategory[t.category] = (expensesByCategory[t.category] ?? 0) + t.amount;
+      } else {
+        incomeBySource[t.category] = (incomeBySource[t.category] ?? 0) + t.amount;
+      }
+    });
+
+    // Tendência dos últimos 3 meses
+    const trends = Array.from({ length: 3 }, (_, i) => {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const ym = d.toISOString().substring(0, 7);
+      let income = 0, expenses = 0;
+      currentState.transactions.forEach(t => {
+        if (!t.date.startsWith(ym)) return;
+        if (t.type === "income") income += t.amount;
+        else expenses += t.amount;
+      });
+      return { month: ym, income, expenses, net: income - expenses };
+    });
+
+    // Utilização do orçamento (% gasto vs limite)
+    const budgetUtilization = Object.entries(currentState.budgetLimits).map(([cat, limit]) => {
+      const spent = currentState.transactions
+        .filter(t => t.type === "expense" && t.category.toLowerCase() === cat.toLowerCase() && t.date.startsWith(currentMonth))
+        .reduce((sum, t) => sum + t.amount, 0);
+      return `${cat}: ${spent.toLocaleString("pt-MZ")}/${limit.toLocaleString("pt-MZ")} MT (${Math.round((spent / limit) * 100)}%)`;
+    });
+
+    // Compromissos recorrentes
+    const recurringMonthly = currentState.transactions
+      .filter(t => t.isRecurring && t.type === "expense")
+      .reduce((sum, t) => sum + t.amount, 0);
+    const recurringIncome = currentState.transactions
+      .filter(t => t.isRecurring && t.type === "income")
+      .reduce((sum, t) => sum + t.amount, 0);
+
+    // Últimas 15 transacções para referência rápida
+    const recentTxs = currentState.transactions.slice(-15).map(t => ({
+      id: t.id, desc: t.description, amt: t.amount, type: t.type,
+      cat: t.category, acc: t.account, date: t.date, rec: t.isRecurring
     }));
 
-    // Resumo de memória de sessão (o que foi dito mas pode não estar registado)
+    // ── Resumo de memória de sessão ──
     const mem = sessionMemoryRef.current;
     const sessionSummary = [
       mem.mentionedIncomes.length > 0
@@ -958,6 +1050,19 @@ export default function Home() {
         : null,
       ...mem.contextNotes
     ].filter(Boolean).join("\n");
+
+    // ── Perfil do utilizador ──
+    const profile = currentState.userProfile;
+    const profileSection = profile && Object.keys(profile).length > 1 ? `\n## PERFIL DO UTILIZADOR (aprendido em conversas anteriores)\n${[
+      profile.name ? `- Nome: ${profile.name}` : null,
+      profile.occupation ? `- Profissão: ${profile.occupation}` : null,
+      profile.monthlyIncome ? `- Rendimento mensal típico: ${profile.monthlyIncome.toLocaleString("pt-MZ")} MT` : null,
+      profile.incomeDay ? `- Recebe o salário por volta do dia ${profile.incomeDay} do mês` : null,
+      profile.familySize ? `- Dependentes: ${profile.familySize} pessoa(s)` : null,
+      profile.primaryAccounts?.length ? `- Contas principais: ${profile.primaryAccounts.join(", ")}` : null,
+      profile.financialGoalNarrative ? `- Objectivos: ${profile.financialGoalNarrative}` : null,
+      profile.behaviorNotes ? `- Comportamento observado: ${profile.behaviorNotes}` : null,
+    ].filter(Boolean).join("\n")}` : "";
 
     const systemInstruction = `És o Kuhula — um conselheiro financeiro pessoal de Moçambique. A tua missão principal não é registar dados: é **compreender profundamente a vida e o comportamento financeiro do utilizador** para o ajudar a tomar melhores decisões.
 
@@ -973,32 +1078,31 @@ O dinheiro é sempre um reflexo de comportamentos, hábitos e crenças. O teu tr
 
 ## COMO CONVERSAS
 
-**Primeiro, ouve e compreende.** Quando alguém partilha uma situação financeira, não saltes para soluções. Faz perguntas que revelam o comportamento:
-- "Quando costumas gastar mais — no início ou no fim do mês?"
-- "O que acontece quando recebes dinheiro extra?"
-- "Há alguma categoria onde sentes que perdes o controlo?"
+**Seja EXTREMAMENTE objectivo e directo.** O utilizador não tem tempo para ler introduções longas. Não escrevas textos como "Ótimo! Fico feliz que...", "Para te poder ajudar...", etc. Vai directo ao assunto.
+Se tiveres que fazer uma pergunta, faz APENAS UMA pergunta curta. Não faças listas de perguntas.
 
 **Usa inputs interactivos** (askUserInput) APENAS quando há opções predefinidas claras e limitadas. Exemplos correctos:
 - "Qual conta usaste?" → single: M-Pesa|BCI|e-Mola
-- "Queres registar?" → confirm
 - "Que categorias incluir?" → multiple com lista fixa
 - "Quanto poupar por mês?" → slider com intervalo conhecido
 
-**NUNCA uses askUserInput para perguntas abertas** como "O que aconteceu?", "Qual é o detalhe?", "Conta-me mais." — essas ficam como texto normal. Se não tens opções predefinidas, escreve a pergunta normalmente.
+**NUNCA uses askUserInput para perguntas abertas** como "O que aconteceu?", "Qual é o detalhe?", "Conta-me mais." — essas ficam como texto normal. Se não tens opções predefinidas, escreve a pergunta normalmente. **Nunca uses askUserInput com type="confirm" para operações financeiras** — o sistema mostra automaticamente um cartão de confirmação ao utilizador antes de executar qualquer operação.
 
-**Só regista no painel após compreender e confirmar.** Nunca uses as ferramentas de forma reactiva. Primeiro compreende o contexto, depois pergunta se quer registar.
+**Recolhe a informação necessária antes de chamar ferramentas financeiras.** Certifica-te de que tens: valor, tipo (receita/despesa), categoria, conta. Se falta algum dado essencial, pergunta primeiro. Quando tiveres tudo, chama a ferramenta directamente.
 
-**Identifica padrões e nomes-os.** Se vires que o utilizador gasta sempre no fim do mês, diz-lhe. Se vir que nunca poupa mas tem objectivos grandes, aponta isso com gentileza. As pessoas mudam quando se reconhecem nos padrões.
+**Aprende e lembra.** Quando o utilizador revelar factos sobre si (nome, profissão, salário, hábitos, objectivos), usa imediatamente a ferramenta **updateUserProfile** para persistir esse conhecimento de forma silenciosa.
 
-**Adapta a linguagem ao utilizador.** Se ele usa linguagem simples, responde simplesmente. Se é técnico, responde com mais detalhe. Nunca uses jargão financeiro desnecessário.
+**Identifica padrões e nomes-os.** Aponta comportamentos de forma directa, sem rodeios.
+
+**Adapta a linguagem ao utilizador.** Se ele usa linguagem simples, responde simplesmente.
 
 ## REGRAS OPERACIONAIS
 
-1. **MEMÓRIA TOTAL**: Lembra-te de absolutamente tudo que foi dito. Nunca perguntes algo que já foi respondido.
-2. **UMA PERGUNTA DE CADA VEZ**: Nunca faças mais de uma pergunta por resposta. Escolhe a mais importante.
-3. **RESPOSTAS CURTAS**: Máximo 2-3 parágrafos. Sem introduções. Vai directo ao ponto.
+1. **OBJETIVIDADE EXTREMA**: Elimina saudações, introduções e "fluff" das tuas respostas. Nunca mais de 2 frases curtas a menos que estejas a dar um plano detalhado.
+2. **UMA PERGUNTA DE CADA VEZ**: É absolutamente proibido fazer múltiplas perguntas de uma vez (como listas pontuadas). Escolhe a mais importante e aguarda a resposta.
+3. **MEMÓRIA TOTAL**: Lembra-te de absolutamente tudo que foi dito. Nunca perguntes algo que já foi respondido.
 4. **LÍNGUA**: Sempre português de Moçambique. Moeda: "45.000 MT" (nunca R$ ou €).
-5. **SEM FERRAMENTAS SEM CONFIRMAÇÃO**: Só chamas ferramentas do painel quando o utilizador confirmar ou pedir explicitamente.
+5. **SEM FERRAMENTAS SEM CONFIRMAÇÃO**: Só chamas ferramentas do painel quando tiveres toda a informação. A UI tratará da confirmação.
 6. **FREQUÊNCIA NAS ESTRATÉGIAS**: Ao criar estratégias, especifica sempre 'frequency'.
 
 ## CONTEXTO DE MOÇAMBIQUE
@@ -1011,21 +1115,40 @@ O dinheiro é sempre um reflexo de comportamentos, hábitos e crenças. O teu tr
 ## METODOLOGIAS (aplica quando o contexto pede)
 
 Regra 50/30/20 · Método dos Envelopes · Pague-se Primeiro · Bola de Neve para dívidas. Explica de forma simples antes de aplicar no painel.
+${profileSection}
+## ESTADO FINANCEIRO ACTUAL
 
-## ESTADO DO PAINEL (referência, não foco)
+### Saldos por Conta
+${Object.entries(currentState.accounts).map(([k, v]) => `- ${k}: ${v.toLocaleString("pt-MZ")} MT`).join("\n") || "- Sem contas registadas"}
+- **Total consolidado: ${totalBalance.toLocaleString("pt-MZ")} MT**
 
-- Saldo total: ${totalBalance.toLocaleString("pt-MZ")} MT
-- Contas: ${JSON.stringify(currentState.accounts)}
-- Metas: ${JSON.stringify(currentState.goals.map(g => ({ title: g.title, target: g.targetAmount, current: g.currentAmount })))}
-- Limites: ${JSON.stringify(currentState.budgetLimits)}
-- Últimas transacções: ${JSON.stringify(recentTxs)}
-${sessionSummary ? `\nCONTEXTO DA CONVERSA ACTUAL:\n${sessionSummary}` : ""}`;
+### Receitas por Categoria — Mês Actual (${currentMonth})
+${Object.entries(incomeBySource).length > 0 ? Object.entries(incomeBySource).map(([k, v]) => `- ${k}: ${v.toLocaleString("pt-MZ")} MT`).join("\n") : "- Nenhuma receita registada este mês"}
 
-    // Histórico ampliado: 30 mensagens (15 turnos) para manter contexto conversacional longo
-    // Filtra mensagens de sistema e de tool responses intermediárias para economizar tokens
+### Despesas por Categoria — Mês Actual (${currentMonth})
+${Object.entries(expensesByCategory).length > 0 ? Object.entries(expensesByCategory).sort(([,a],[,b]) => b - a).map(([k, v]) => `- ${k}: ${v.toLocaleString("pt-MZ")} MT`).join("\n") : "- Nenhuma despesa registada este mês"}
+
+### Tendência dos Últimos 3 Meses
+${trends.map(t => `- ${t.month}: Receitas ${t.income.toLocaleString("pt-MZ")} MT | Despesas ${t.expenses.toLocaleString("pt-MZ")} MT | Saldo líquido ${t.net >= 0 ? "+" : ""}${t.net.toLocaleString("pt-MZ")} MT`).join("\n")}
+
+### Comprometimento Recorrente
+- Despesas fixas/mês: ${recurringMonthly.toLocaleString("pt-MZ")} MT
+- Receitas fixas/mês: ${recurringIncome.toLocaleString("pt-MZ")} MT
+
+### Limites de Orçamento
+${budgetUtilization.length > 0 ? budgetUtilization.map(b => `- ${b}`).join("\n") : "- Nenhum limite definido"}
+
+### Metas de Poupança
+${currentState.goals.length > 0 ? currentState.goals.map(g => `- ${g.title}: ${g.currentAmount.toLocaleString("pt-MZ")}/${g.targetAmount.toLocaleString("pt-MZ")} MT (${Math.round((g.currentAmount / g.targetAmount) * 100)}%) — prazo: ${g.deadline}`).join("\n") : "- Nenhuma meta definida"}
+
+### Últimas 15 Transacções (referência)
+${JSON.stringify(recentTxs)}
+${sessionSummary ? `\n### CONTEXTO DA CONVERSA ACTUAL\n${sessionSummary}` : ""}`;
+
+    // Histórico ampliado: 50 mensagens (25 turnos) para manter contexto conversacional longo
     const validHistory = history
       .filter(msg => msg.role === "user" || msg.role === "model")
-      .slice(-30);
+      .slice(-50);
 
     const res = await fetch("/api/chat", {
       method: "POST",
@@ -1115,39 +1238,118 @@ ${sessionSummary ? `\nCONTEXTO DA CONVERSA ACTUAL:\n${sessionSummary}` : ""}`;
     return { cleanText, toolCalls };
   };
 
-  // Processar resposta da IA
+  // Descreve uma tool call em linguagem natural para o cartão de confirmação
+  const describeToolCall = (name: string, args: any): string => {
+    const fmt = (n: number) => n?.toLocaleString("pt-MZ") ?? "?";
+    switch (name) {
+      case "addTransaction":
+        return `${args.type === "income" ? "💰 Receita" : "💸 Despesa"}: **${fmt(args.amount)} MT** — ${args.description} | Categoria: ${args.category} | Conta: ${args.account}${args.isRecurring ? " ✔️ recorrente" : ""}`;
+      case "deleteTransaction":
+        return `🗑️ Eliminar transação com ID \`${args.id}\``;
+      case "adjustAccountBalance":
+        return `💳 Ajustar saldo de **${args.accountName}** para **${fmt(args.balance)} MT**`;
+      case "deleteAccount":
+        return `🗑️ Eliminar conta **${args.accountName}**`;
+      case "createOrUpdateGoal":
+        return `🎯 Meta: **${args.title}** — objetivo ${fmt(args.targetAmount)} MT${args.deadline ? ` | prazo: ${args.deadline}` : ""}`;
+      case "deleteGoal":
+        return `🗑️ Eliminar meta **${args.title}**`;
+      case "setBudgetLimit":
+        return `📊 Limite de **${args.category}**: ${fmt(args.limitAmount)} MT/mês`;
+      case "createOrUpdateStrategy":
+        return `💡 Estratégia: **${args.title}** — ${args.description ?? ""}`;
+      case "deleteStrategy":
+        return `🗑️ Eliminar estratégia \`${args.id}\``;
+      default:
+        return `🔧 ${name}: ${JSON.stringify(args)}`;
+    }
+  };
+
+  /**
+   * Executado após o utilizador confirmar ou cancelar uma operação financeira interceptada.
+   * Se confirmado: executa as tool calls armazenadas e faz a segunda chamada à IA.
+   * Se cancelado: informa a IA que a operação foi recusada.
+   */
+  const handleFinancialConfirmation = async (confirmed: boolean) => {
+    if (!pendingConfirmation) return;
+    const { toolCalls, history, appState } = pendingConfirmation;
+    setPendingConfirmation(null);
+
+    // Marca a mensagem de confirmação como respondida
+    setMessages(prev => prev.map(m => 
+      m.isPendingFinancial 
+        ? { ...m, interactiveInput: { ...m.interactiveInput!, answered: true, answeredValue: confirmed ? "Sim" : "Não" } }
+        : m
+    ));
+
+    if (!confirmed) {
+      addSystemLog("Operação cancelada pelo utilizador.");
+      await handleSendMessage("Não, cancelei. Não registar por agora.");
+      return;
+    }
+
+    setIsTyping(true);
+    let stateToMutate = { ...appState };
+    const toolResponseParts: any[] = [];
+
+    for (const tc of toolCalls) {
+      addSystemLog(`✅ Confirmado e executado: **${tc.name}**`);
+      const executionResult = executeToolAction(tc.name, tc.args, stateToMutate);
+      stateToMutate = executionResult.newState;
+
+      const dbAction = toolCallToPersistAction(tc.name, tc.args, executionResult.newState);
+      if (dbAction) persistAction(dbAction, stateToMutate);
+
+      toolResponseParts.push({
+        functionResponse: { name: tc.name, response: executionResult.result }
+      });
+    }
+
+    saveState(stateToMutate);
+
+    const toolNames = toolCalls.map(tc => tc.name).join(", ");
+    const toolMsgText = `[Sistema: A operação envolvendo as ferramentas ${toolNames} foi confirmada pelo utilizador e registada com sucesso. Informa brevemente o utilizador que está tudo pronto.]`;
+    const toolMsg: ChatMessage = { role: "user", parts: [{ text: toolMsgText }] };
+    const finalHistory = [...history, toolMsg];
+
+    try {
+      const secondRes = await callChatAPI(finalHistory, stateToMutate);
+      setIsTyping(false);
+
+      if (secondRes.text) {
+        const modelMsg: ChatMessage = { role: "model", parts: [{ text: secondRes.text }] };
+        // Preserva a mensagem interactiva no ecrã adicionando ao prev
+        setMessages(prev => {
+          const updated = [...prev, modelMsg];
+          localStorage.setItem("kuhula_chat_history", JSON.stringify(updated));
+          return updated;
+        });
+        persistChatMessages([{ role: "model", content: secondRes.text }]);
+      }
+      if (secondRes.usage) {
+        updateTokenStats(secondRes.usage.promptTokens, secondRes.usage.completionTokens);
+      }
+    } catch (err: any) {
+      setIsTyping(false);
+      addSystemLog(`Erro na resposta após confirmação: ${err.message}`);
+    }
+  };
+
   const handleAIResponse = async (aiData: any, currentHistory: ChatMessage[], currentState: AppState) => {
-    // aiData já vem no formato normalizado: { text?, toolCalls?, usage? }
     let { text, toolCalls, usage } = aiData;
+
+    log.info("ai", "Resposta recebida", {
+      hasText: !!text,
+      textPreview: text ? text.substring(0, 100) + (text.length > 100 ? "..." : "") : null,
+      toolCalls: toolCalls?.map((t: any) => t.name)
+    });
 
     if (usage) {
       updateTokenStats(usage.promptTokens ?? 0, usage.completionTokens ?? 0);
     }
 
-    // ── Sanitizar texto: alguns providers (Groq, OpenRouter) às vezes
-    // embebem JSON de tool calls no texto em vez de os devolver estruturados.
     if (text && !toolCalls?.length) {
       const extracted = extractEmbeddedToolCalls(text);
-
-      // Log de debug — captura TODAS as respostas de texto
-      const ts = new Date().toLocaleTimeString("pt-MZ");
-      const log = [
-        `[${ts}] RESPOSTA IA`,
-        `Provider: ${provider} | Modelo: ${model}`,
-        `toolCalls recebidos: ${JSON.stringify(aiData.toolCalls ?? [])}`,
-        `── TEXTO BRUTO (${text.length} chars) ──`,
-        text.slice(0, 600),
-        `── JSON EXTRAÍDOS ──`,
-        extracted.toolCalls.length > 0
-          ? extracted.toolCalls.map(tc => `${tc.name}: ${JSON.stringify(tc.args)}`).join("\n")
-          : "nenhum",
-        `── TEXTO APÓS LIMPEZA ──`,
-        extracted.cleanText.slice(0, 200) || "(igual)",
-        "─".repeat(40),
-      ].join("\n");
-
-      setDebugInfo(prev => prev ? prev + "\n\n" + log : log);
-
       if (extracted.toolCalls.length > 0) {
         text = extracted.cleanText.trim();
         toolCalls = extracted.toolCalls;
@@ -1155,45 +1357,66 @@ ${sessionSummary ? `\nCONTEXTO DA CONVERSA ACTUAL:\n${sessionSummary}` : ""}`;
     }
 
     if (toolCalls && toolCalls.length > 0) {
+      const askInputCall = toolCalls.find((tc: any) => tc.name === "askUserInput");
+      if (askInputCall) {
+        const interactiveMsg: ChatMessage = {
+          role: "interactive",
+          parts: [{ text: "" }],
+          interactiveInput: { args: askInputCall.args as AskUserInputArgs },
+        };
+        setMessages(prev => [...prev, interactiveMsg]);
+        setIsTyping(false);
+        return;
+      }
+
+      const financialCalls = toolCalls.filter((tc: any) => FINANCIAL_TOOLS.has(tc.name));
+      const silentCalls = toolCalls.filter((tc: any) => !FINANCIAL_TOOLS.has(tc.name));
+
       let stateToMutate = { ...currentState };
       const toolResponseParts: any[] = [];
 
-      for (const tc of toolCalls) {
-        // askUserInput não muta estado — renderiza UI interactiva no chat
-        if (tc.name === "askUserInput") {
-          const interactiveMsg: ChatMessage = {
-            role: "interactive",
-            parts: [{ text: "" }],
-            interactiveInput: { args: tc.args as AskUserInputArgs },
-          };
-          setMessages(prev => [...prev, interactiveMsg]);
-          setIsTyping(false);
-          return; // Aguarda resposta do utilizador
-        }
-
-        addSystemLog(`IA executou a ferramenta: **${tc.name}**`);
+      for (const tc of silentCalls) {
         const executionResult = executeToolAction(tc.name, tc.args, stateToMutate);
         stateToMutate = executionResult.newState;
-
-        // Persistência atómica na DB para cada operação
         const dbAction = toolCallToPersistAction(tc.name, tc.args, executionResult.newState);
         if (dbAction) persistAction(dbAction, stateToMutate);
-
+        
         toolResponseParts.push({
           functionResponse: { name: tc.name, response: executionResult.result }
         });
       }
+      if (silentCalls.length > 0) saveState(stateToMutate);
 
-      saveState(stateToMutate);
+      if (financialCalls.length > 0) {
+        setPendingConfirmation({
+          toolCalls: financialCalls,
+          history: currentHistory,
+          appState: stateToMutate,
+        });
 
-      // Segunda chamada para resposta conversacional (só Gemini precisa disto;
-      // OpenAI/Anthropic já devolvem texto + tool calls juntos)
-      const toolMsg: ChatMessage = { role: "user", parts: toolResponseParts };
-      const finalHistory = [
-        ...currentHistory,
-        { role: "model" as const, parts: toolResponseParts.map(t => ({ functionCall: { name: t.functionResponse.name, args: {} } })) },
-        toolMsg
-      ];
+        const summaryLines = financialCalls.map((tc: any) => describeToolCall(tc.name, tc.args)).join("\n");
+        const question = financialCalls.length === 1
+          ? "Posso registar esta operação?"
+          : `Posso registar estas ${financialCalls.length} operações?`;
+
+        const confirmMsg: ChatMessage = {
+          role: "interactive",
+          parts: [{ text: summaryLines }],
+          interactiveInput: {
+            args: { question, type: "confirm" },
+          },
+          isPendingFinancial: true,
+        };
+        setMessages(prev => [...prev, confirmMsg]);
+        setIsTyping(false);
+        return; 
+      }
+
+      // Se só houve chamadas silenciosas, faz a segunda chamada à IA para gerar a resposta final
+      const toolNames = silentCalls.map((tc: any) => tc.name).join(", ");
+      const toolMsgText = `[Sistema: A ferramenta silenciosa ${toolNames} foi executada em background e o estado foi actualizado. Continua a conversa normalmente respondendo à última intenção do utilizador.]`;
+      const toolMsg: ChatMessage = { role: "user", parts: [{ text: toolMsgText }] };
+      const finalHistory = [...currentHistory, toolMsg];
 
       setIsTyping(true);
       const secondRes = await callChatAPI(finalHistory, stateToMutate);
@@ -1212,7 +1435,6 @@ ${sessionSummary ? `\nCONTEXTO DA CONVERSA ACTUAL:\n${sessionSummary}` : ""}`;
     } else if (text) {
       const modelMsg: ChatMessage = { role: "model", parts: [{ text }] };
       setMessages(prev => [...prev, modelMsg]);
-      // Guarda mensagem do utilizador + resposta da IA na DB
       const userMsg = currentHistory[currentHistory.length - 1];
       saveChatHistory([...currentHistory, modelMsg], [
         ...(userMsg?.parts?.[0]?.text ? [{ role: "user" as const, content: userMsg.parts[0].text }] : []),
@@ -1248,6 +1470,17 @@ ${sessionSummary ? `\nCONTEXTO DA CONVERSA ACTUAL:\n${sessionSummary}` : ""}`;
       }
       case "deleteStrategy":
         return { action: "delete_strategy", payload: { id: args.id } };
+      case "updateUserProfile": {
+        // Converte primaryAccounts de string para array se necessário
+        const profilePayload = { ...args };
+        if (typeof profilePayload.primaryAccounts === "string") {
+          profilePayload.primaryAccounts = profilePayload.primaryAccounts
+            .split(",")
+            .map((s: string) => s.trim())
+            .filter(Boolean);
+        }
+        return { action: "update_user_profile", payload: { profile: profilePayload } };
+      }
       default:
         return null;
     }
@@ -1413,6 +1646,28 @@ ${sessionSummary ? `\nCONTEXTO DA CONVERSA ACTUAL:\n${sessionSummary}` : ""}`;
           } else {
             result = { success: false, message: `Estratégia com ID ${args.id} não encontrada.` };
           }
+          break;
+        }
+
+        case "updateUserProfile": {
+          // Converte primaryAccounts de string para array se necessário
+          const profileData = { ...args };
+          if (typeof profileData.primaryAccounts === "string") {
+            profileData.primaryAccounts = profileData.primaryAccounts
+              .split(",")
+              .map((s: string) => s.trim())
+              .filter(Boolean);
+          }
+          stateCopy.userProfile = {
+            ...(stateCopy.userProfile ?? {}),
+            ...profileData,
+            lastUpdated: new Date().toISOString(),
+          };
+          // Persiste a memória de sessão no localStorage após aprender algo novo
+          if (typeof window !== "undefined") {
+            localStorage.setItem("kuhula_session_memory", JSON.stringify(sessionMemoryRef.current));
+          }
+          result = { success: true, message: `Perfil actualizado: ${Object.keys(profileData).join(", ")}.` };
           break;
         }
       }
@@ -2124,7 +2379,16 @@ ${sessionSummary ? `\nCONTEXTO DA CONVERSA ACTUAL:\n${sessionSummary}` : ""}`;
                 <div className="self-start w-[80%] h-16 bg-zinc-900/50 border border-zinc-800/40 rounded-lg animate-pulse" />
               </div>
             ) : (
-              messages.filter(m => m.role === "user" || m.role === "model" || m.role === "interactive").map((msg, i) => {
+              messages
+                .filter(m => {
+                  if (m.role === "interactive") return true;
+                  if (m.role === "user" || m.role === "model") {
+                    const text = m.parts?.[0]?.text || "";
+                    return text.trim() !== "";
+                  }
+                  return false;
+                })
+                .map((msg, i) => {
                 // ── Mensagem interactiva (input da IA) ──────────────
                 if (msg.role === "interactive" && msg.interactiveInput) {
                   return (
@@ -2212,6 +2476,19 @@ ${sessionSummary ? `\nCONTEXTO DA CONVERSA ACTUAL:\n${sessionSummary}` : ""}`;
       />
     </section>
   );
+
+  if (!isMounted) {
+    return (
+      <div className="flex flex-col items-center justify-center h-dvh w-full bg-zinc-950 text-zinc-50">
+        <Sprout className="w-12 h-12 text-zinc-500 animate-pulse mb-6" />
+        <div className="flex items-center gap-1.5">
+          <div className="w-1.5 h-1.5 bg-zinc-400 rounded-full animate-bounce" />
+          <div className="w-1.5 h-1.5 bg-zinc-400 rounded-full animate-bounce [animation-delay:0.2s]" />
+          <div className="w-1.5 h-1.5 bg-zinc-400 rounded-full animate-bounce [animation-delay:0.4s]" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div id="main-layout-root" className="flex flex-col h-dvh w-full bg-zinc-950 text-zinc-50 overflow-hidden font-sans">

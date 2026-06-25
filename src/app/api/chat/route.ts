@@ -135,6 +135,27 @@ Não uses para perguntas abertas onde qualquer texto serve.`,
     },
     required: ["question", "type"],
   },
+  updateUserProfile: {
+    description: `Actualiza o perfil persistente do utilizador com factos aprendidos durante a conversa.
+Usa esta ferramenta quando o utilizador revelar informações importantes sobre si mesmo, tais como:
+- Nome ou profissão
+- Rendimento mensal típico ou dia do mês em que recebe
+- Número de dependentes ou família
+- Objectivos financeiros de longo prazo
+- Padrões de comportamento recorrentes ("gasto sempre no fim do mês", "nunca poupo antes de ter objectivo")
+Esta ferramenta faz merge — podes enviar apenas os campos que aprendeste. Não perguntes ao utilizador antes de usar; usa sempre que obtiveres um novo facto relevante.`,
+    parameters: {
+      name: { type: "string", description: "Nome ou como prefere ser tratado." },
+      occupation: { type: "string", description: "Profissão ou actividade principal." },
+      monthlyIncome: { type: "number", description: "Rendimento mensal típico em MT." },
+      incomeDay: { type: "integer", description: "Dia do mês em que habitualmente recebe o salário (1-31)." },
+      familySize: { type: "integer", description: "Número de pessoas que dependem financeiramente do utilizador (incluindo ele próprio)." },
+      primaryAccounts: { type: "string", description: "Contas principais separadas por vírgula (ex: 'M-Pesa, BCI')." },
+      financialGoalNarrative: { type: "string", description: "Resumo em 1-2 frases dos objectivos financeiros do utilizador." },
+      behaviorNotes: { type: "string", description: "Padrões de comportamento financeiro observados pelo agente (hábitos, tendências, pontos de melhoria)." },
+    },
+    required: [],
+  },
 };
 
 // ── Helpers para construir tools por provider ────────────────
