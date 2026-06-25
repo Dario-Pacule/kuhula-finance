@@ -51,8 +51,11 @@ export async function runMigrations() {
     const connectionString = getConnectionString();
     sql = postgres(connectionString, {
       max: 1,
-      connect_timeout: 10,
+      connect_timeout: 15,
       ssl: "require",
+      // Necessário para o pooler de transacções do Supabase (porta 6543)
+      // que não suporta prepared statements
+      prepare: false,
     });
 
     // Tabela de controlo de migrations
