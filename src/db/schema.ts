@@ -21,8 +21,8 @@ export const profiles = pgTable("profiles", {
   displayName: text("display_name"),
   currency:    text("currency").notNull().default("MT"),
   locale:      text("locale").notNull().default("pt-MZ"),
-  createdAt:   timestamp({ withTimezone: true })("created_at").notNull().default(sql`now()`),
-  updatedAt:   timestamp({ withTimezone: true })("updated_at").notNull().default(sql`now()`),
+  createdAt:   timestamp("created_at", { withTimezone: true }).notNull().default(sql`now()`),
+  updatedAt:   timestamp("updated_at", { withTimezone: true }).notNull().default(sql`now()`),
 });
 
 // ── accounts ──────────────────────────────────────────────────
@@ -32,8 +32,8 @@ export const accounts = pgTable("accounts", {
   name:      text("name").notNull(),
   balance:   numeric("balance", { precision: 14, scale: 2 }).notNull().default("0"),
   type:      text("type").notNull().default("bank"),
-  createdAt: timestamp({ withTimezone: true })("created_at").notNull().default(sql`now()`),
-  updatedAt: timestamp({ withTimezone: true })("updated_at").notNull().default(sql`now()`),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().default(sql`now()`),
 }, (t) => [
   uniqueIndex("accounts_user_name_idx").on(t.userId, t.name),
 ]);
@@ -51,7 +51,7 @@ export const transactions = pgTable("transactions", {
   isRecurring: boolean("is_recurring").notNull().default(false),
   dayOfMonth:  smallint("day_of_month"),
   date:        date("date").notNull().default(sql`current_date`),
-  createdAt:   timestamp({ withTimezone: true })("created_at").notNull().default(sql`now()`),
+  createdAt:   timestamp("created_at", { withTimezone: true }).notNull().default(sql`now()`),
 }, (t) => [
   index("idx_transactions_user_date").on(t.userId, t.date),
   index("idx_transactions_user_type").on(t.userId, t.type),
@@ -65,8 +65,8 @@ export const goals = pgTable("goals", {
   targetAmount:  numeric("target_amount", { precision: 14, scale: 2 }).notNull(),
   currentAmount: numeric("current_amount", { precision: 14, scale: 2 }).notNull().default("0"),
   deadline:      date("deadline"),
-  createdAt:     timestamp({ withTimezone: true })("created_at").notNull().default(sql`now()`),
-  updatedAt:     timestamp({ withTimezone: true })("updated_at").notNull().default(sql`now()`),
+  createdAt:     timestamp("created_at", { withTimezone: true }).notNull().default(sql`now()`),
+  updatedAt:     timestamp("updated_at", { withTimezone: true }).notNull().default(sql`now()`),
 }, (t) => [
   uniqueIndex("goals_user_title_idx").on(t.userId, t.title),
 ]);
@@ -77,8 +77,8 @@ export const budgetLimits = pgTable("budget_limits", {
   userId:      uuid("user_id").notNull(),
   category:    text("category").notNull(),
   limitAmount: numeric("limit_amount", { precision: 14, scale: 2 }).notNull(),
-  createdAt:   timestamp({ withTimezone: true })("created_at").notNull().default(sql`now()`),
-  updatedAt:   timestamp({ withTimezone: true })("updated_at").notNull().default(sql`now()`),
+  createdAt:   timestamp("created_at", { withTimezone: true }).notNull().default(sql`now()`),
+  updatedAt:   timestamp("updated_at", { withTimezone: true }).notNull().default(sql`now()`),
 }, (t) => [
   uniqueIndex("budget_limits_user_category_idx").on(t.userId, t.category),
 ]);
@@ -92,8 +92,8 @@ export const strategies = pgTable("strategies", {
   type:        text("type").notNull().default("info"),
   actionLabel: text("action_label"),
   frequency:   text("frequency"),
-  createdAt:   timestamp({ withTimezone: true })("created_at").notNull().default(sql`now()`),
-  updatedAt:   timestamp({ withTimezone: true })("updated_at").notNull().default(sql`now()`),
+  createdAt:   timestamp("created_at", { withTimezone: true }).notNull().default(sql`now()`),
+  updatedAt:   timestamp("updated_at", { withTimezone: true }).notNull().default(sql`now()`),
 }, (t) => [
   uniqueIndex("strategies_user_id_idx").on(t.userId, t.id),
 ]);
@@ -104,7 +104,7 @@ export const chatMessages = pgTable("chat_messages", {
   userId:    uuid("user_id").notNull(),
   role:      text("role").notNull(),
   content:   text("content").notNull(),
-  createdAt: timestamp({ withTimezone: true })("created_at").notNull().default(sql`now()`),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`now()`),
 }, (t) => [
   index("idx_chat_messages_user").on(t.userId, t.createdAt),
 ]);
@@ -116,6 +116,6 @@ export const aiProviders = pgTable("ai_providers", {
   model:            text("model").notNull().default("gemini-2.5-flash"),
   apiKeyEncrypted:  text("api_key_encrypted"),
   submitOnEnter:    boolean("submit_on_enter").notNull().default(true),
-  createdAt:        timestamp({ withTimezone: true })("created_at").notNull().default(sql`now()`),
-  updatedAt:        timestamp({ withTimezone: true })("updated_at").notNull().default(sql`now()`),
+  createdAt:        timestamp("created_at", { withTimezone: true }).notNull().default(sql`now()`),
+  updatedAt:        timestamp("updated_at", { withTimezone: true }).notNull().default(sql`now()`),
 });
