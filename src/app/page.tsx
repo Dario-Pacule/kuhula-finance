@@ -66,8 +66,10 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AppState, Goal, ChatMessage, AskUserInputArgs } from "@/types";
+import { log } from "@/lib/logger";
 import { ChatInteractiveInput } from "@/components/ChatInteractiveInput";
 import { RichChatInput } from "@/components/RichChatInput";
+import { RuntimeLogsPanel } from "@/components/RuntimeLogsPanel";
 import { usePersistence, type PersistAction } from "@/hooks/usePersistence";
 import { AI_PROVIDERS, getDefaultModel, type ProviderId } from "@/lib/ai-providers";
 
@@ -133,7 +135,7 @@ export default function Home() {
   const [isDebugOpen, setIsDebugOpen] = useState<boolean>(false);
   const [debugInfo, setDebugInfo] = useState<string>("");
   const [errorLogs, setErrorLogs] = useState<Array<{ timestamp: string; provider: string; model: string; message: string }>>([]);
-  const [isDebugView, setIsDebugView] = useState<"layout" | "errors" | "health">("layout");
+  const [isDebugView, setIsDebugView] = useState<"layout" | "errors" | "health" | "runtime">("layout");
   const [healthCheck, setHealthCheck] = useState<Array<{
     label: string;
     status: "ok" | "error" | "warning" | "loading";
@@ -696,6 +698,8 @@ export default function Home() {
       apiKey: inputApiKey,
       submitOnEnter: inputSubmitOnEnter,
     });
+
+    log.info("ai-config", `Configurações guardadas`, { provider: inputProvider, model: inputModel, hasKey: !!inputApiKey });
 
     setIsSettingsOpen(false);
     addSystemLog(`Configurações actualizadas — Provider: ${inputProvider}, Modelo: ${inputModel}`);
@@ -2596,6 +2600,12 @@ ${sessionSummary ? `\nCONTEXTO DA CONVERSA ACTUAL:\n${sessionSummary}` : ""}`;
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
                 )}
               </button>
+              <button
+                className={`flex-1 text-[10px] font-semibold py-1 rounded transition-colors ${isDebugView === "runtime" ? "bg-zinc-800 text-zinc-100" : "text-zinc-500 hover:text-zinc-300"}`}
+                onClick={() => setIsDebugView("runtime")}
+              >
+                Runtime
+              </button>
             </div>
 
             {isDebugView === "layout" && (
@@ -2681,9 +2691,9 @@ ${sessionSummary ? `\nCONTEXTO DA CONVERSA ACTUAL:\n${sessionSummary}` : ""}`;
                 )}
               </div>
             )}
-          </div>
-
-          <DialogFooter className="border-t border-zinc-800 pt-4 flex sm:justify-between items-center w-full gap-2">
+            {isDebugView === "runtime" && (
+              <RuntimeLogsPanel />
+            )}
             <div className="text-[11px] text-zinc-400">
               {isCopied && <span className="flex items-center gap-1 text-emerald-400"><Check className="w-3.5 h-3.5" /> Copiado!</span>}
               {errorLogs.length > 0 && isDebugView === "errors" && (
