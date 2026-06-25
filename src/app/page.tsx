@@ -2211,7 +2211,7 @@ ${sessionSummary ? `\nCONTEXTO DA CONVERSA ACTUAL:\n${sessionSummary}` : ""}`;
           <div className="flex items-center justify-center w-9 h-9 rounded-md bg-zinc-50 text-zinc-950 shadow-sm">
             <Sprout className="w-4.5 h-4.5" />
           </div>
-          <div>
+          <div className="hidden sm:block">
             <h1 className="font-heading text-sm font-bold tracking-tight text-zinc-100">
               Kuhula Finance
             </h1>
