@@ -276,6 +276,15 @@ export default function Home() {
     }
   }, [messages, isTyping, isChatCollapsed, activeTab]);
 
+  // Scroll para a última mensagem quando o histórico termina de carregar
+  useEffect(() => {
+    if (!isChatHistoryLoading && messages.length > 0) {
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
+      }, 100);
+    }
+  }, [isChatHistoryLoading]);
+
   // Persistir Estado Financeiro — actualiza React state + localStorage
   // A persistência na DB é feita atomicamente por executeToolAction via persistAction
   const saveState = (newState: AppState) => {
@@ -284,9 +293,10 @@ export default function Home() {
   };
 
   // Persistir Histórico de Chat
-  const saveChatHistory = (newHistory: ChatMessage[], newMessages?: Array<{ role: "user" | "model"; content: string }>) => {
-    setMessages(newHistory);
-    localStorage.setItem("kuhula_chat_history", JSON.stringify(newHistory));
+  // Nota: NÃO chama setMessages — o estado React é gerido pelos chamadores via setMessages(prev=>[...prev, msg])
+  // Isto evita o bug de stale closure onde o histórico substitui mensagens recentes não reflectidas no closure
+  const saveChatHistory = (historyForLocalStorage: ChatMessage[], newMessages?: Array<{ role: "user" | "model"; content: string }>) => {
+    localStorage.setItem("kuhula_chat_history", JSON.stringify(historyForLocalStorage));
     // Guarda apenas as mensagens novas deste turno na DB (evita duplicados)
     if (newMessages?.length) persistChatMessages(newMessages);
   };
