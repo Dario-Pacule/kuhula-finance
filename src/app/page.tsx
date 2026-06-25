@@ -130,7 +130,17 @@ export default function Home() {
     contextNotes: [],
   });
   
-  const [activeTab, setActiveTab] = useState<"dashboard" | "chat" | "metrics">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "chat" | "metrics">(() => {
+    if (typeof window === "undefined") return "dashboard";
+    const saved = localStorage.getItem("kuhula_active_tab");
+    return (saved === "chat" || saved === "metrics" || saved === "dashboard") ? saved : "dashboard";
+  });
+
+  // Guarda a tab activa sempre que muda
+  const handleSetActiveTab = (tab: "dashboard" | "chat" | "metrics") => {
+    setActiveTab(tab);
+    localStorage.setItem("kuhula_active_tab", tab);
+  };
   const [tokenStats, setTokenStats] = useState({
     totalRequests: 0,
     promptTokens: 0,
@@ -2241,7 +2251,7 @@ ${sessionSummary ? `\nCONTEXTO DA CONVERSA ACTUAL:\n${sessionSummary}` : ""}`;
         {/* Navegação - Desktop */}
         <div className="hidden lg:flex items-center gap-1 bg-zinc-900/60 p-0.5 rounded-md border border-zinc-800/80">
           <button
-            onClick={() => setActiveTab("dashboard")}
+            onClick={() => handleSetActiveTab("dashboard")}
             className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded transition-all ${
               activeTab === "dashboard"
                 ? "bg-zinc-800 text-zinc-100 shadow-sm"
@@ -2251,7 +2261,7 @@ ${sessionSummary ? `\nCONTEXTO DA CONVERSA ACTUAL:\n${sessionSummary}` : ""}`;
             Dashboard
           </button>
           <button
-            onClick={() => setActiveTab("metrics")}
+            onClick={() => handleSetActiveTab("metrics")}
             className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded transition-all ${
               activeTab === "metrics"
                 ? "bg-zinc-800 text-zinc-100 shadow-sm"
@@ -2340,7 +2350,7 @@ ${sessionSummary ? `\nCONTEXTO DA CONVERSA ACTUAL:\n${sessionSummary}` : ""}`;
       {/* Barra de Navegação por Abas - Visível Apenas no Celular */}
       <div className="flex border-b border-zinc-800 bg-zinc-950 lg:hidden">
         <button
-          onClick={() => setActiveTab("dashboard")}
+          onClick={() => handleSetActiveTab("dashboard")}
           className={`flex-1 py-3 text-xs font-semibold uppercase tracking-wider flex items-center justify-center gap-2 border-b-2 transition-all ${
             activeTab === "dashboard"
               ? "border-zinc-500 text-zinc-100 bg-zinc-900/30"
@@ -2350,7 +2360,7 @@ ${sessionSummary ? `\nCONTEXTO DA CONVERSA ACTUAL:\n${sessionSummary}` : ""}`;
           <Wallet className="w-3.5 h-3.5" /> Painel
         </button>
         <button
-          onClick={() => setActiveTab("metrics")}
+          onClick={() => handleSetActiveTab("metrics")}
           className={`flex-1 py-3 text-xs font-semibold uppercase tracking-wider flex items-center justify-center gap-2 border-b-2 transition-all ${
             activeTab === "metrics"
               ? "border-zinc-500 text-zinc-100 bg-zinc-900/30"
@@ -2360,7 +2370,7 @@ ${sessionSummary ? `\nCONTEXTO DA CONVERSA ACTUAL:\n${sessionSummary}` : ""}`;
           <Activity className="w-3.5 h-3.5" /> Métricas
         </button>
         <button
-          onClick={() => setActiveTab("chat")}
+          onClick={() => handleSetActiveTab("chat")}
           className={`flex-1 py-3 text-xs font-semibold uppercase tracking-wider flex items-center justify-center gap-2 border-b-2 transition-all ${
             activeTab === "chat"
               ? "border-zinc-500 text-zinc-100 bg-zinc-900/30"
