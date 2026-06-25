@@ -121,7 +121,7 @@ end $$;
 
 -- RLS
 do $$ declare t text; begin
-  foreach t in array array['profiles','accounts','transactions','goals','budget_limits','strategies','chat_messages','ai_providers'] loop
+  foreach t in array array['accounts','transactions','goals','budget_limits','strategies','chat_messages','ai_providers'] loop
     execute format('alter table public.%I enable row level security', t);
     execute format(
       'drop policy if exists "owner_all_%s" on public.%I;
