@@ -2208,8 +2208,25 @@ ${sessionSummary ? `\nCONTEXTO DA CONVERSA ACTUAL:\n${sessionSummary}` : ""}`;
       {/* Cabeçalho Principal */}
       <header id="main-header" className="relative flex items-center justify-between h-[70px] px-6 bg-zinc-950 border-b border-zinc-800 z-10">
         <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center w-9 h-9 rounded-md bg-zinc-50 text-zinc-950 shadow-sm">
-            <Sprout className="w-4.5 h-4.5" />
+          {/* Ícone com badge de sincronização */}
+          <div className="relative">
+            <div className="flex items-center justify-center w-9 h-9 rounded-md bg-zinc-50 text-zinc-950 shadow-sm">
+              <Sprout className="w-4.5 h-4.5" />
+            </div>
+            {/* Badge de estado — dot no canto inferior direito do ícone */}
+            <div className="absolute -bottom-0.5 -right-0.5">
+              {syncStatus === "syncing" && (
+                <div className="w-3 h-3 rounded-full bg-zinc-950 flex items-center justify-center" title="A sincronizar...">
+                  <div className="w-2 h-2 rounded-full border border-zinc-400 border-t-transparent animate-spin" />
+                </div>
+              )}
+              {syncStatus === "error" && (
+                <div className="w-3 h-3 rounded-full bg-red-500 border border-zinc-950" title="Erro de sincronização" />
+              )}
+              {syncStatus === "synced" && (
+                <div className="w-3 h-3 rounded-full bg-emerald-500 border border-zinc-950" title="Sincronizado" />
+              )}
+            </div>
           </div>
           <div className="hidden sm:block">
             <h1 className="font-heading text-sm font-bold tracking-tight text-zinc-100">
@@ -2277,7 +2294,6 @@ ${sessionSummary ? `\nCONTEXTO DA CONVERSA ACTUAL:\n${sessionSummary}` : ""}`;
 
         {/* Ações do Cabeçalho */}
         <div className="flex items-center gap-2">
-          {renderSyncStatus()}
           {/* Botão de abrir chat visível no Desktop quando colapsado */}
           {isChatCollapsed && (
             <Button
