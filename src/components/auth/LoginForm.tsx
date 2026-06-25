@@ -23,8 +23,8 @@ export function LoginForm() {
         ? await login(formData)
         : await register(formData);
 
-      if (result && "error" in result)   setError(result.error);
-      if (result && "success" in result) setSuccess(result.success);
+      if (result && "error" in result)   setError(result.error ?? null);
+      if (result && "success" in result) setSuccess(result.success ?? null);
     });
   };
 
