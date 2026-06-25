@@ -300,10 +300,16 @@ async function callOpenAI(
   if (!res.ok) throw new Error(`OpenAI ${res.status}: ${data.error?.message ?? res.statusText}`);
 
   const choice = data.choices?.[0];
-  const toolCalls = (choice?.message?.tool_calls ?? []).map((tc: any) => ({
-    name: tc.function.name,
-    args: JSON.parse(tc.function.arguments ?? "{}"),
-  }));
+  const rawToolCalls = choice?.message?.tool_calls ?? [];
+  const toolCalls = rawToolCalls.map((tc: any) => {
+    let args = {};
+    try {
+      args = JSON.parse(tc.function?.arguments ?? "{}");
+    } catch (e) {
+      console.error(`[chat API] Erro ao parsear arguments da tool ${tc.function?.name}:`, tc.function?.arguments);
+    }
+    return { name: tc.function?.name, args };
+  }).filter((tc: any) => tc.name);
 
   return {
     text: choice?.message?.content ?? undefined,
@@ -442,6 +448,7 @@ export async function POST(req: Request) {
   } catch (err: any) {
     const errorMsg = err.message ?? "Erro interno";
     console.error(`[chat API] provider=${provider} model=${model} error=${errorMsg}`);
+    console.error(`[chat API] stack:`, err.stack);
     return NextResponse.json(
       { error: errorMsg },
       { status: 500 }
