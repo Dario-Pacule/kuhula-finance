@@ -55,6 +55,16 @@ export const log = {
   error: (module: string, message: string, data?: any) => addEntry("error", module, message, data),
   debug: (module: string, message: string, data?: any) => addEntry("debug", module, message, data),
   clear: () => { _entries = []; notify(); },
+  getAll: () => [..._entries],
+  copyToClipboard: () => {
+    const text = _entries
+      .slice()
+      .reverse()
+      .map(e => `[${e.ts}] ${e.level.toUpperCase().padEnd(5)} [${e.module}] ${e.message}${e.data !== undefined ? " " + JSON.stringify(e.data) : ""}`)
+      .join("\n");
+    navigator.clipboard.writeText(text).catch(() => {});
+    return text;
+  },
 };
 
 // ── Hook React ────────────────────────────────────────────────

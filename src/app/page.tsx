@@ -2712,6 +2712,14 @@ ${sessionSummary ? `\nCONTEXTO DA CONVERSA ACTUAL:\n${sessionSummary}` : ""}`;
                   {isCopied ? "Copiado!" : "Copiar"}
                 </Button>
               )}
+              {isDebugView === "runtime" && (
+                <Button
+                  onClick={() => { import("@/lib/logger").then(m => m.log.copyToClipboard()); }}
+                  className="bg-zinc-100 hover:bg-zinc-200 text-zinc-900 text-xs font-semibold rounded flex items-center gap-1.5"
+                >
+                  <Copy className="w-3.5 h-3.5" /> Copiar logs
+                </Button>
+              )}
               <Button onClick={() => setIsDebugOpen(false)} variant="outline" className="border-zinc-800 hover:bg-zinc-900 text-xs text-zinc-400">
                 Fechar
               </Button>
