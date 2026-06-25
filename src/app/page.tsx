@@ -2694,6 +2694,9 @@ ${sessionSummary ? `\nCONTEXTO DA CONVERSA ACTUAL:\n${sessionSummary}` : ""}`;
             {isDebugView === "runtime" && (
               <RuntimeLogsPanel />
             )}
+          </div>
+
+          <DialogFooter className="border-t border-zinc-800 pt-4 flex sm:justify-between items-center w-full gap-2">
             <div className="text-[11px] text-zinc-400">
               {isCopied && <span className="flex items-center gap-1 text-emerald-400"><Check className="w-3.5 h-3.5" /> Copiado!</span>}
               {errorLogs.length > 0 && isDebugView === "errors" && (
@@ -2703,7 +2706,7 @@ ${sessionSummary ? `\nCONTEXTO DA CONVERSA ACTUAL:\n${sessionSummary}` : ""}`;
               )}
             </div>
             <div className="flex gap-2">
-              {isDebugView !== "health" && (
+              {isDebugView !== "health" && isDebugView !== "runtime" && (
                 <Button onClick={handleCopyDebug} className="bg-zinc-100 hover:bg-zinc-200 text-zinc-900 text-xs font-semibold rounded flex items-center gap-1.5">
                   {isCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                   {isCopied ? "Copiado!" : "Copiar"}
