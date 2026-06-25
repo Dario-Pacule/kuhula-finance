@@ -964,12 +964,18 @@ export default function Home() {
       }]);
       setIsDebugView("errors");
 
+      // Mensagem amigável para rate limit 429
+      const is429 = errorDetail.includes("429") || errorDetail.toLowerCase().includes("rate limit") || errorDetail.toLowerCase().includes("quota");
+      const friendlyMessage = is429
+        ? `⚡ **Limite de pedidos atingido** no provider **${provider}**.\n\nO plano gratuito tem um limite de pedidos por minuto. Aguarda alguns segundos e tenta novamente, ou muda de provider nas configurações ⚙️.`
+        : `Ocorreu um erro ao contactar o provider **${provider}**:\n\`${errorDetail}\`\n\nVerifica as configurações ⚙️ — chave de API e modelo seleccionado.`;
+
       // Mostra erro no chat com opção de reenvio
       setMessages(prev => [
         ...prev,
         {
           role: "model" as const,
-          parts: [{ text: `Ocorreu um erro ao contactar o provider **${provider}**:\n\`${errorDetail}\`\n\nVerifica as configurações ⚙️ — chave de API e modelo seleccionado.` }],
+          parts: [{ text: friendlyMessage }],
           isError: true,
           retryText: text,
         }
@@ -2676,13 +2682,13 @@ ${sessionSummary ? `\n### CONTEXTO DA CONVERSA ACTUAL\n${sessionSummary}` : ""}`
 
       {/* Main Workspace (Desktop vs Mobile) */}
       <main className="flex-1 flex overflow-hidden relative z-10">
-        {/* Vista Móvel: Visível apenas em ecrãs pequenos (< 1024px) */}
-        <div className="flex h-full w-full lg:hidden">
+        {/* Vista Móvel: Visível apenas em ecrãs pequenos (< 768px) */}
+        <div className="flex h-full w-full md:hidden">
           {activeTab === "dashboard" ? dashboardSection : activeTab === "metrics" ? metricsSection : chatSection}
         </div>
 
-        {/* Vista Desktop: Visível apenas em ecrãs grandes (>= 1024px) */}
-        <div className="hidden lg:flex h-full w-full overflow-hidden">
+        {/* Vista Desktop: Visível apenas em ecrãs grandes (>= 768px) */}
+        <div className="hidden md:flex h-full w-full overflow-hidden">
           <div className={`h-full transition-all duration-300 ${isChatCollapsed ? "w-full" : "w-[68%]"}`}>
             {activeTab === "metrics" ? metricsSection : dashboardSection}
           </div>
