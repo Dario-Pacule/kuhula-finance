@@ -22,10 +22,10 @@ export const AI_PROVIDERS: ProviderConfig[] = [
     keyPlaceholder: "AIza...",
     keyUrl: "https://aistudio.google.com",
     models: [
-      { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash", free: true, recommended: true },
-      { id: "gemini-2.0-flash", label: "Gemini 2.0 Flash", free: true },
-      { id: "gemini-1.5-flash", label: "Gemini 1.5 Flash", free: true },
-      { id: "gemini-1.5-pro",   label: "Gemini 1.5 Pro",   free: false },
+      { id: "gemini-2.0-flash-exp", label: "Gemini 2.0 Flash Exp", free: true, recommended: true },
+      { id: "gemini-1.5-flash-latest", label: "Gemini 1.5 Flash Latest", free: true },
+      { id: "gemini-1.5-flash-002", label: "Gemini 1.5 Flash 002", free: true },
+      { id: "gemini-1.5-pro-latest",   label: "Gemini 1.5 Pro",   free: false },
     ],
   },
   {

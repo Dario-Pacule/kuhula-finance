@@ -122,13 +122,13 @@ export default function Home() {
   
   // Estado IA — multi-provider
   const [provider, setProvider] = useState<ProviderId>("gemini");
-  const [model, setModel] = useState<string>("gemini-2.5-flash");
+  const [model, setModel] = useState<string>("gemini-1.5-flash-latest");
   const [clientApiKey, setClientApiKey] = useState<string>("");
   const [showApiKey, setShowApiKey] = useState<boolean>(false);
 
   // Inputs temporários do modal de configurações
   const [inputProvider, setInputProvider] = useState<ProviderId>("gemini");
-  const [inputModel, setInputModel] = useState<string>("gemini-2.5-flash");
+  const [inputModel, setInputModel] = useState<string>("gemini-1.5-flash-latest");
   const [inputApiKey, setInputApiKey] = useState<string>("");
   const [submitOnEnter, setSubmitOnEnter] = useState<boolean>(true);
   const [inputSubmitOnEnter, setInputSubmitOnEnter] = useState<boolean>(true);
