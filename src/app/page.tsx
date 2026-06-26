@@ -661,13 +661,16 @@ export default function Home() {
         setInputModel(data.models[0].id);
         const modelNames = data.models.map((m: any) => m.id).join(", ");
         addSystemLog(`Modelos carregados (${inputProvider}): ${modelNames}`);
+        log.info("ai-config", `Modelos carregados (${inputProvider})`, data.models.map((m: any) => m.id));
       } else {
         console.error("Falha ao carregar modelos", data.error);
         addSystemLog(`Falha ao carregar modelos dinâmicos: ${data.error || "Erro desconhecido"}`);
+        log.error("ai-config", "Falha ao carregar modelos dinâmicos", data.error);
       }
     } catch (e: any) {
       console.error(e);
       addSystemLog(`Erro ao carregar modelos: ${e.message}`);
+      log.error("ai-config", "Exceção em handleFetchModels", e.message);
     } finally {
       setIsFetchingModels(false);
     }
