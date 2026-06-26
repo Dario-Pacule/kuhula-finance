@@ -910,13 +910,13 @@ export default function Home() {
 
     const newHistory: ChatMessage[] = [
       ...messages,
-      { role: "user", parts: [{ text }] }
+      { role: "user", parts: [{ text }], timestamp: new Date().toISOString() }
     ];
 
     // Atualiza chat UI com texto limpo
     setMessages(prev => [
       ...prev,
-      { role: "user", parts: [{ text }] }
+      { role: "user", parts: [{ text }], timestamp: new Date().toISOString() }
     ]);
     
     setInputValue("");
@@ -925,7 +925,7 @@ export default function Home() {
       setTimeout(() => {
         setMessages(prev => [
           ...prev,
-          { role: "model", parts: [{ text: `Por favor, configure a chave de API para **${provider}** nas definições ⚙️.` }] }
+          { role: "model", parts: [{ text: `Por favor, configure a chave de API para **${provider}** nas definições ⚙️.` }], timestamp: new Date().toISOString() }
         ]);
       }, 600);
       return;
@@ -978,6 +978,7 @@ export default function Home() {
           parts: [{ text: friendlyMessage }],
           isError: true,
           retryText: text,
+          timestamp: new Date().toISOString(),
         }
       ]);
     }
@@ -1333,7 +1334,7 @@ ${sessionSummary ? `\n### CONTEXTO DA CONVERSA ACTUAL\n${sessionSummary}` : ""}`
       setIsTyping(false);
 
       if (secondRes.text) {
-        const modelMsg: ChatMessage = { role: "model", parts: [{ text: secondRes.text }] };
+        const modelMsg: ChatMessage = { role: "model", parts: [{ text: secondRes.text }], timestamp: new Date().toISOString() };
         // Preserva a mensagem interactiva no ecrã adicionando ao prev
         setMessages(prev => {
           const updated = [...prev, modelMsg];
@@ -1379,6 +1380,7 @@ ${sessionSummary ? `\n### CONTEXTO DA CONVERSA ACTUAL\n${sessionSummary}` : ""}`
           role: "interactive",
           parts: [{ text: "" }],
           interactiveInput: { args: askInputCall.args as AskUserInputArgs },
+          timestamp: new Date().toISOString(),
         };
         setMessages(prev => [...prev, interactiveMsg]);
         setIsTyping(false);
@@ -1439,7 +1441,7 @@ ${sessionSummary ? `\n### CONTEXTO DA CONVERSA ACTUAL\n${sessionSummary}` : ""}`
       setIsTyping(false);
 
       if (secondRes.text) {
-        const modelMsg: ChatMessage = { role: "model", parts: [{ text: secondRes.text }] };
+        const modelMsg: ChatMessage = { role: "model", parts: [{ text: secondRes.text }], timestamp: new Date().toISOString() };
         setMessages(prev => [...prev, modelMsg]);
         // Persiste com o histórico real (sem a mensagem interna [Sistema:])
         const userMsg = currentHistory[currentHistory.length - 1];
@@ -1452,7 +1454,7 @@ ${sessionSummary ? `\n### CONTEXTO DA CONVERSA ACTUAL\n${sessionSummary}` : ""}`
         updateTokenStats(secondRes.usage.promptTokens, secondRes.usage.completionTokens);
       }
     } else if (text) {
-      const modelMsg: ChatMessage = { role: "model", parts: [{ text }] };
+      const modelMsg: ChatMessage = { role: "model", parts: [{ text }], timestamp: new Date().toISOString() };
       setMessages(prev => [...prev, modelMsg]);
       const userMsg = currentHistory[currentHistory.length - 1];
       saveChatHistory([...currentHistory, modelMsg], [
@@ -2443,10 +2445,14 @@ ${sessionSummary ? `\n### CONTEXTO DA CONVERSA ACTUAL\n${sessionSummary}` : ""}`
                         : "self-end bg-zinc-100 text-zinc-950 shadow-sm font-medium"
                     }`}
                   >
-                    <div
-                      dangerouslySetInnerHTML={{ __html: formattedHtml }}
-                      className="message-content p-3.5"
-                    />
+                    <div className="message-content p-3.5">
+                      <div dangerouslySetInnerHTML={{ __html: formattedHtml }} />
+                      {msg.timestamp && (
+                        <div className={`mt-1 text-[9px] font-medium opacity-60 flex ${isModel ? "justify-start" : "justify-end"}`}>
+                          {new Date(msg.timestamp).toLocaleTimeString("pt-MZ", { hour: "2-digit", minute: "2-digit" })}
+                        </div>
+                      )}
+                    </div>
                     {/* Botão de reenvio em mensagens de erro */}
                     {msg.isError && msg.retryText && (
                       <div className="px-3.5 pb-3 flex items-center gap-2">

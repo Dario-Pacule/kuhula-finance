@@ -87,4 +87,5 @@ export interface ChatMessage {
   retryText?: string;
   /** Marcado em mensagens interactivas que representam uma confirmação de operação financeira */
   isPendingFinancial?: boolean;
+  timestamp?: string;
 }
