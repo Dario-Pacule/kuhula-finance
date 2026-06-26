@@ -74,7 +74,7 @@ import { ChatInteractiveInput } from "@/components/ChatInteractiveInput";
 import { RichChatInput } from "@/components/RichChatInput";
 import { RuntimeLogsPanel } from "@/components/RuntimeLogsPanel";
 import { usePersistence, type PersistAction, type SyncStatus } from "@/hooks/usePersistence";
-import { AI_PROVIDERS, getDefaultModel, type ProviderId } from "@/lib/ai-providers";
+import { AI_PROVIDERS, getDefaultModel, sanitizeModelId, type ProviderId } from "@/lib/ai-providers";
 
 const DEFAULT_STATE: AppState = {
   accounts: {},
@@ -213,11 +213,12 @@ export default function Home() {
       setMessages(chatMessages);
     },
     onAiConfigLoaded: (config) => {
+      const sanitizedModel = sanitizeModelId(config.model);
       setProvider(config.provider as ProviderId);
-      setModel(config.model);
+      setModel(sanitizedModel);
       setClientApiKey(config.apiKey);
       setInputProvider(config.provider as ProviderId);
-      setInputModel(config.model);
+      setInputModel(sanitizedModel);
       setInputApiKey(config.apiKey);
       if (config.submitOnEnter !== undefined) {
         setSubmitOnEnter(config.submitOnEnter);

@@ -83,3 +83,10 @@ export function getDefaultModel(id: ProviderId): string {
   const p = getProvider(id);
   return p.models.find((m) => m.recommended)?.id ?? p.models[0].id;
 }
+
+export function sanitizeModelId(model: string): string {
+  if (model === "gemini-1.5-flash" || model === "gemini-1.5-flash-8b") return "gemini-1.5-flash-latest";
+  if (model === "gemini-2.5-flash") return "gemini-2.0-flash-exp";
+  if (model === "gemini-1.5-pro") return "gemini-1.5-pro-latest";
+  return model;
+}
