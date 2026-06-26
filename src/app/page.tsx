@@ -623,18 +623,22 @@ export default function Home() {
   const handleCopyDebug = () => {
     if (typeof navigator === "undefined") return;
     
+    const textToCopy = isDebugView === "errors"
+      ? errorLogs.map(log => `[${log.timestamp}] Provider: ${log.provider} - Modelo: ${log.model || "N/A"}\n${log.message}`).join("\n\n")
+      : debugInfo;
+      
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(debugInfo)
+      navigator.clipboard.writeText(textToCopy)
         .then(() => {
           setIsCopied(true);
           setTimeout(() => setIsCopied(false), 2000);
         })
         .catch((err) => {
           console.error("Falha ao copiar com navigator.clipboard, usando fallback", err);
-          fallbackCopyText(debugInfo);
+          fallbackCopyText(textToCopy);
         });
     } else {
-      fallbackCopyText(debugInfo);
+      fallbackCopyText(textToCopy);
     }
   };
 
