@@ -74,7 +74,7 @@ import { ChatInteractiveInput } from "@/components/ChatInteractiveInput";
 import { RichChatInput } from "@/components/RichChatInput";
 import { RuntimeLogsPanel } from "@/components/RuntimeLogsPanel";
 import { usePersistence, type PersistAction, type SyncStatus } from "@/hooks/usePersistence";
-import { AI_PROVIDERS, getDefaultModel, sanitizeModelId, type ProviderId } from "@/lib/ai-providers";
+import { AI_PROVIDERS, getDefaultModel, sanitizeModelId, type ProviderId, type ModelOption } from "@/lib/ai-providers";
 
 const DEFAULT_STATE: AppState = {
   accounts: {},
@@ -132,6 +132,10 @@ export default function Home() {
   const [inputApiKey, setInputApiKey] = useState<string>("");
   const [submitOnEnter, setSubmitOnEnter] = useState<boolean>(true);
   const [inputSubmitOnEnter, setInputSubmitOnEnter] = useState<boolean>(true);
+
+  // Modelos dinâmicos
+  const [dynamicModels, setDynamicModels] = useState<Record<ProviderId, ModelOption[]>>({} as any);
+  const [isFetchingModels, setIsFetchingModels] = useState(false);
   
   // Chat
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -639,6 +643,32 @@ export default function Home() {
         });
     } else {
       fallbackCopyText(textToCopy);
+    }
+  };
+
+  const handleFetchModels = async () => {
+    if (!inputApiKey && inputProvider !== "openrouter") return;
+    setIsFetchingModels(true);
+    try {
+      const res = await fetch("/api/models", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider: inputProvider, apiKey: inputApiKey })
+      });
+      const data = await res.json();
+      if (res.ok && data.models?.length > 0) {
+        setDynamicModels(prev => ({ ...prev, [inputProvider]: data.models }));
+        setInputModel(data.models[0].id);
+        addSystemLog(`Modelos carregados dinamicamente para o provider: ${inputProvider}`);
+      } else {
+        console.error("Falha ao carregar modelos", data.error);
+        addSystemLog(`Falha ao carregar modelos dinâmicos: ${data.error || "Erro desconhecido"}`);
+      }
+    } catch (e: any) {
+      console.error(e);
+      addSystemLog(`Erro ao carregar modelos: ${e.message}`);
+    } finally {
+      setIsFetchingModels(false);
     }
   };
 
@@ -2758,13 +2788,23 @@ ${sessionSummary ? `\n### CONTEXTO DA CONVERSA ACTUAL\n${sessionSummary}` : ""}`
 
                 {/* Selector de Modelo */}
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">Modelo:</label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">Modelo:</label>
+                    <button 
+                      onClick={handleFetchModels} 
+                      disabled={isFetchingModels || (!inputApiKey && inputProvider !== 'openrouter')} 
+                      className="text-[9px] text-emerald-400 hover:text-emerald-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 transition-colors"
+                      title="Carregar modelos disponíveis da API com a chave inserida abaixo"
+                    >
+                      {isFetchingModels ? <Loader2 className="w-3 h-3 animate-spin" /> : "↻ Carregar da API"}
+                    </button>
+                  </div>
                   <Select value={inputModel} onValueChange={(val) => val && setInputModel(val)}>
                     <SelectTrigger className="bg-zinc-900 border-zinc-800 text-xs text-zinc-50 rounded">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent className="bg-zinc-900 border border-zinc-800 text-zinc-50">
-                      {AI_PROVIDERS.find(p => p.id === inputProvider)?.models.map(m => (
+                    <SelectContent className="bg-zinc-900 border border-zinc-800 text-zinc-50 max-h-[300px]">
+                      {(dynamicModels[inputProvider] || AI_PROVIDERS.find(p => p.id === inputProvider)?.models || []).map(m => (
                         <SelectItem key={m.id} value={m.id}>
                           {m.label}
                           {m.free && <span className="ml-1 text-[9px] text-emerald-400">grátis</span>}
