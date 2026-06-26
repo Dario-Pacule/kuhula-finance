@@ -67,7 +67,7 @@ export interface ChatPart {
 
 export interface AskUserInputArgs {
   question: string;
-  type: "single" | "multiple" | "confirm" | "slider";
+  inputType: "single" | "multiple" | "confirm" | "slider";
   options?: string;
   sliderMin?: number;
   sliderMax?: number;

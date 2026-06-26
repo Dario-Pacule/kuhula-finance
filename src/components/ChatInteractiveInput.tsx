@@ -48,7 +48,7 @@ export function ChatInteractiveInput({ args, onAnswer, answered, answeredValue }
   }
 
   // ── Confirm (Sim / Não) ──────────────────────────────────────
-  if (args.type === "confirm") {
+  if (args.inputType === "confirm") {
     return (
       <div className="flex flex-col gap-2.5 bg-zinc-900 border border-zinc-800 rounded-xl p-3.5">
         <p className="text-[11.5px] text-zinc-200 leading-relaxed">{args.question}</p>
@@ -74,7 +74,7 @@ export function ChatInteractiveInput({ args, onAnswer, answered, answeredValue }
   }
 
   // ── Single (escolha única) ───────────────────────────────────
-  if (args.type === "single") {
+  if (args.inputType === "single") {
     return (
       <div className="flex flex-col gap-2.5 bg-zinc-900 border border-zinc-800 rounded-xl p-3.5">
         <p className="text-[11.5px] text-zinc-200 leading-relaxed">{args.question}</p>
@@ -95,7 +95,7 @@ export function ChatInteractiveInput({ args, onAnswer, answered, answeredValue }
   }
 
   // ── Multiple (checkboxes) ────────────────────────────────────
-  if (args.type === "multiple") {
+  if (args.inputType === "multiple") {
     const toggle = (opt: string) => {
       setSelected(prev =>
         prev.includes(opt) ? prev.filter(o => o !== opt) : [...prev, opt]
@@ -141,7 +141,7 @@ export function ChatInteractiveInput({ args, onAnswer, answered, answeredValue }
   }
 
   // ── Slider ───────────────────────────────────────────────────
-  if (args.type === "slider") {
+  if (args.inputType === "slider") {
     const min = args.sliderMin ?? 0;
     const max = args.sliderMax ?? 100;
     const step = args.sliderStep ?? 1;

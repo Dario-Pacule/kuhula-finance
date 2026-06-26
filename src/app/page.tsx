@@ -1103,7 +1103,8 @@ Se tiveres que fazer uma pergunta, faz APENAS UMA pergunta curta. Não faças li
 - "Que categorias incluir?" → multiple com lista fixa
 - "Quanto poupar por mês?" → slider com intervalo conhecido
 
-**NUNCA uses askUserInput para perguntas abertas** como "O que aconteceu?", "Qual é o detalhe?", "Conta-me mais." — essas ficam como texto normal. Se não tens opções predefinidas, escreve a pergunta normalmente. **Nunca uses askUserInput com type="confirm" para operações financeiras** — o sistema mostra automaticamente um cartão de confirmação ao utilizador antes de executar qualquer operação.
+**NUNCA uses askUserInput para perguntas abertas** como "O que aconteceu?", "Qual é o detalhe?", "Conta-me mais." — essas ficam como texto normal. Se não tens opções predefinidas, escreve a pergunta normalmente. **Nunca uses askUserInput com inputType="confirm" para operações financeiras** — o sistema mostra automaticamente um cartão de confirmação ao utilizador antes de executar qualquer operação.
+Sempre que precisares que o utilizador escolha uma opção predefinida, és OBRIGADO a usar a ferramenta **askUserInput** (não uses texto normal com listas enumeradas).
 
 **Recolhe a informação necessária antes de chamar ferramentas financeiras.** Certifica-te de que tens: valor, tipo (receita/despesa), categoria, conta. Se falta algum dado essencial, pergunta primeiro. Quando tiveres tudo, chama a ferramenta directamente.
 
@@ -1421,9 +1422,10 @@ ${sessionSummary ? `\n### CONTEXTO DA CONVERSA ACTUAL\n${sessionSummary}` : ""}`
           role: "interactive",
           parts: [{ text: summaryLines }],
           interactiveInput: {
-            args: { question, type: "confirm" },
+            args: { question, inputType: "confirm" },
           },
           isPendingFinancial: true,
+          timestamp: new Date().toISOString(),
         };
         setMessages(prev => [...prev, confirmMsg]);
         setIsTyping(false);

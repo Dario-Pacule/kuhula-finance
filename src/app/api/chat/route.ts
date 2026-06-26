@@ -119,7 +119,7 @@ Usa esta ferramenta quando precisares de uma escolha clara do utilizador, por ex
 Não uses para perguntas abertas onde qualquer texto serve.`,
     parameters: {
       question: { type: "string", description: "A pergunta clara a mostrar ao utilizador." },
-      type: {
+      inputType: {
         type: "string",
         enum: ["single", "multiple", "confirm", "slider"],
         description: "single=escolha única, multiple=várias opções, confirm=Sim/Não, slider=valor numérico.",
@@ -133,7 +133,7 @@ Não uses para perguntas abertas onde qualquer texto serve.`,
       sliderStep: { type: "number", description: "Incremento do slider (só para type=slider)." },
       sliderUnit: { type: "string", description: "Unidade a mostrar no slider (ex: 'MT', '%')." },
     },
-    required: ["question", "type"],
+    required: ["question", "inputType"],
   },
   updateUserProfile: {
     description: `Actualiza o perfil persistente do utilizador com factos aprendidos durante a conversa.
