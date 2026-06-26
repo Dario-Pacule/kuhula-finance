@@ -659,7 +659,8 @@ export default function Home() {
       if (res.ok && data.models?.length > 0) {
         setDynamicModels(prev => ({ ...prev, [inputProvider]: data.models }));
         setInputModel(data.models[0].id);
-        addSystemLog(`Modelos carregados dinamicamente para o provider: ${inputProvider}`);
+        const modelNames = data.models.map((m: any) => m.id).join(", ");
+        addSystemLog(`Modelos carregados (${inputProvider}): ${modelNames}`);
       } else {
         console.error("Falha ao carregar modelos", data.error);
         addSystemLog(`Falha ao carregar modelos dinâmicos: ${data.error || "Erro desconhecido"}`);
