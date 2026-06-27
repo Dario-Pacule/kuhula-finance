@@ -419,7 +419,7 @@ export async function loadChatHistory(
     .select("role, content")
     .eq("user_id", userId)
     .eq("session_id", sessionId)
-    .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
     .limit(limit);
 
   if (error) return [];
