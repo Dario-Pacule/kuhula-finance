@@ -50,10 +50,18 @@ export interface ChatMessageRecord {
   content: string;
 }
 
+export interface ChatSession {
+  id: string;
+  title: string;
+  updated_at: string;
+}
+
 export type SyncStatus = "syncing" | "synced" | "error";
 
 interface UsePersistenceOptions {
   onStateLoaded: (state: AppState) => void;
+  onSessionsLoaded: (sessions: ChatSession[]) => void;
+  onActiveSessionLoaded: (sessionId: string) => void;
   onChatHistoryLoaded: (messages: ChatMessageRecord[]) => void;
   onAiConfigLoaded: (config: AiConfig) => void;
   onSyncStatusChange?: (status: SyncStatus) => void;
@@ -62,12 +70,15 @@ interface UsePersistenceOptions {
 
 export function usePersistence({
   onStateLoaded,
+  onSessionsLoaded,
+  onActiveSessionLoaded,
   onChatHistoryLoaded,
   onAiConfigLoaded,
   onSyncStatusChange,
   onChatHistoryLoadComplete
 }: UsePersistenceOptions) {
   const userIdRef = useRef<string>("");
+  const activeSessionIdRef = useRef<string | null>(null);
   const activeRequests = useRef(0);
   const hasError = useRef(false);
 
@@ -222,59 +233,103 @@ export function usePersistence({
     }
   }, [startSync, endSync]);
 
-  // ── Histórico de chat ─────────────────────────────────────────
+  // ── Histórico de chat e Sessões ───────────────────────────────
 
-  const loadChatHistory = async () => {
-    const cached = localStorage.getItem("kuhula_chat_history");
-    if (cached) {
-      try {
-        const parsed = JSON.parse(cached);
-        const records: ChatMessageRecord[] = parsed
-          .filter((m: any) => (m.role === "user" || m.role === "model") && m.parts?.[0]?.text)
-          .map((m: any) => ({ role: m.role, content: m.parts[0].text }));
-        if (records.length) {
-          onChatHistoryLoaded(records);
-          log.debug("chat", `${records.length} mensagens carregadas do localStorage`);
-        }
-      } catch {}
+  const loadChatSessions = async () => {
+    try {
+      const res = await fetch(`/api/chat-sessions?userId=${userIdRef.current}`);
+      if (res.ok) {
+        const { sessions } = await res.json();
+        onSessionsLoaded(sessions || []);
+        return sessions || [];
+      }
+    } catch (e: any) {
+      log.error("chat", "Excepção em loadChatSessions", e?.message);
     }
+    return [];
+  };
+
+  const switchChatSession = useCallback(async (sessionId: string) => {
+    activeSessionIdRef.current = sessionId;
+    onActiveSessionLoaded(sessionId);
     startSync();
     let success = false;
     try {
-      log.info("chat", `GET /api/chat-history userId=${userIdRef.current.slice(0,8)}...`);
-      const res = await fetch(`/api/chat-history?userId=${userIdRef.current}&limit=100`);
-      log.info("chat", `GET /api/chat-history → ${res.status}`);
+      log.info("chat", `GET /api/chat-history userId=${userIdRef.current.slice(0,8)}... sessionId=${sessionId}`);
+      const res = await fetch(`/api/chat-history?userId=${userIdRef.current}&sessionId=${sessionId}&limit=100`);
       if (res.ok) {
         const { messages } = await res.json();
-        if (messages?.length) {
-          onChatHistoryLoaded(messages);
-          const asChatMessages = messages.map((m: ChatMessageRecord) => ({ role: m.role, parts: [{ text: m.content }] }));
-          localStorage.setItem("kuhula_chat_history", JSON.stringify(asChatMessages));
-          log.info("chat", `${messages.length} mensagens carregadas da DB`);
-        } else {
-          log.debug("chat", "Sem histórico de chat na DB");
-        }
+        onChatHistoryLoaded(messages || []);
         success = true;
-      } else {
-        log.error("chat", `GET /api/chat-history falhou ${res.status}`);
       }
     } catch (e: any) {
-      log.error("chat", "Excepção em loadChatHistory", e?.message);
+      log.error("chat", "Excepção em switchChatSession", e?.message);
     } finally {
       endSync(success);
       onChatHistoryLoadComplete?.();
     }
+  }, [onActiveSessionLoaded, onChatHistoryLoaded, startSync, endSync, onChatHistoryLoadComplete]);
+
+  const loadChatHistory = async () => {
+    startSync();
+    let success = false;
+    try {
+      const sessions = await loadChatSessions();
+      if (sessions.length > 0) {
+        const latestSession = sessions[0];
+        await switchChatSession(latestSession.id);
+      } else {
+        onChatHistoryLoaded([]);
+        onChatHistoryLoadComplete?.();
+      }
+      success = true;
+    } finally {
+      endSync(success);
+    }
   };
+
+  const createNewChatSession = useCallback(async (title: string = "Nova Conversa") => {
+    startSync();
+    let success = false;
+    try {
+      const res = await fetch("/api/chat-sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: userIdRef.current, title }),
+      });
+      if (res.ok) {
+        const { sessionId } = await res.json();
+        activeSessionIdRef.current = sessionId;
+        onActiveSessionLoaded(sessionId);
+        onChatHistoryLoaded([]);
+        loadChatSessions(); // recarregar a lista
+        success = true;
+        return sessionId;
+      }
+    } catch (e: any) {
+      log.error("chat", "Excepção em createNewChatSession", e?.message);
+    } finally {
+      endSync(success);
+    }
+    return null;
+  }, [onActiveSessionLoaded, onChatHistoryLoaded, startSync, endSync]);
 
   const persistChatMessages = useCallback(async (newMessages: ChatMessageRecord[]) => {
     if (!newMessages.length) return;
+    
+    // Se não há sessão ativa, criar uma antes de guardar
+    if (!activeSessionIdRef.current) {
+      const newId = await createNewChatSession();
+      if (!newId) return;
+    }
+
     startSync();
     let success = false;
     try {
       const res = await fetch("/api/chat-history", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: userIdRef.current, messages: newMessages }),
+        body: JSON.stringify({ userId: userIdRef.current, sessionId: activeSessionIdRef.current, messages: newMessages }),
       });
       if (!res.ok) log.warn("chat", `persistChatMessages falhou ${res.status}`);
       else {
@@ -286,7 +341,7 @@ export function usePersistence({
     } finally {
       endSync(success);
     }
-  }, [startSync, endSync]);
+  }, [createNewChatSession, startSync, endSync]);
 
   // ── Limpar tudo ───────────────────────────────────────────────
 
@@ -308,5 +363,13 @@ export function usePersistence({
     }
   }, [startSync, endSync]);
 
-  return { userId: userIdRef, persistAction, persistChatMessages, saveAiConfig, clearRemoteData };
+  return { 
+    userId: userIdRef, 
+    persistAction, 
+    persistChatMessages, 
+    saveAiConfig, 
+    clearRemoteData,
+    createNewChatSession,
+    switchChatSession
+  };
 }

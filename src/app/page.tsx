@@ -12,6 +12,9 @@ import {
   Bot, 
   Send, 
   Eye, 
+  History,
+  MessageSquare,
+  X,
   EyeOff, 
   Download, 
   Upload, 
@@ -206,10 +209,15 @@ export default function Home() {
 
   // Diálogos
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
+  const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
+  const [chatSessions, setChatSessions] = useState<any[]>([]);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
 
   // Hook de persistência (Supabase + localStorage fallback)
-  const { userId, persistAction, persistChatMessages, saveAiConfig, clearRemoteData } = usePersistence({
+  const { userId, persistAction, persistChatMessages, saveAiConfig, clearRemoteData, createNewChatSession, switchChatSession } = usePersistence({
     onStateLoaded: (loadedState) => setState(loadedState),
+    onSessionsLoaded: (sessions) => setChatSessions(sessions),
+    onActiveSessionLoaded: (sessionId) => setActiveSessionId(sessionId),
     onChatHistoryLoaded: (records) => {
       const chatMessages = records.map(r => ({
         role: r.role as "user" | "model",
@@ -2732,6 +2740,15 @@ ${sessionSummary ? `\n### CONTEXTO DA CONVERSA ACTUAL\n${sessionSummary}` : ""}`
           <Button 
             variant="outline" 
             size="icon" 
+            onClick={() => setIsDrawerOpen(true)}
+            className="w-9 h-9 rounded-md border-zinc-800 hover:bg-zinc-900 text-zinc-400 hover:text-zinc-100 mr-0.5"
+            title="Histórico de Conversas"
+          >
+            <History className="w-4 h-4" />
+          </Button>
+          <Button 
+            variant="outline" 
+            size="icon" 
             onClick={() => setIsSettingsOpen(true)}
             className="w-9 h-9 rounded-md border-zinc-800 hover:bg-zinc-900 text-zinc-400 hover:text-zinc-100"
           >
@@ -3228,6 +3245,48 @@ ${sessionSummary ? `\n### CONTEXTO DA CONVERSA ACTUAL\n${sessionSummary}` : ""}`
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {/* Drawer do Histórico de Sessões */}
+      {isDrawerOpen && (
+        <div className="fixed inset-0 z-[100] flex justify-end bg-black/50" onClick={() => setIsDrawerOpen(false)}>
+          <div 
+            className="w-80 h-full bg-zinc-950 border-l border-zinc-800 shadow-xl flex flex-col"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="p-4 border-b border-zinc-800 flex justify-between items-center">
+              <h3 className="text-zinc-200 font-semibold">Histórico de Conversas</h3>
+              <Button variant="ghost" size="icon" onClick={() => setIsDrawerOpen(false)} className="text-zinc-400 hover:text-zinc-100">
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+            <div className="p-4 flex flex-col flex-1 overflow-hidden">
+              <Button 
+                onClick={() => { createNewChatSession(); setIsDrawerOpen(false); }}
+                className="w-full justify-start border border-zinc-700 mb-4 bg-zinc-900 hover:bg-zinc-800 text-zinc-200"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Novo Chat
+              </Button>
+              <div className="flex flex-col gap-2 overflow-y-auto">
+                {chatSessions.length === 0 && (
+                  <p className="text-xs text-zinc-500 text-center py-4">Sem histórico anterior.</p>
+                )}
+                {chatSessions.map((session) => (
+                  <Button
+                    key={session.id}
+                    variant="ghost"
+                    className={`w-full justify-start text-left text-sm ${activeSessionId === session.id ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-400 hover:text-zinc-300 hover:bg-zinc-900'}`}
+                    onClick={() => { switchChatSession(session.id); setIsDrawerOpen(false); }}
+                  >
+                    <MessageSquare className="w-4 h-4 mr-2 shrink-0 opacity-50" />
+                    <span className="truncate">{session.title}</span>
+                  </Button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

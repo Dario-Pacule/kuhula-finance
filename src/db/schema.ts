@@ -98,15 +98,27 @@ export const strategies = pgTable("strategies", {
   uniqueIndex("strategies_user_id_idx").on(t.userId, t.id),
 ]);
 
+// ── chat_sessions ─────────────────────────────────────────────
+export const chatSessions = pgTable("chat_sessions", {
+  id:        uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId:    uuid("user_id").notNull(),
+  title:     text("title").notNull().default("Nova Conversa"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().default(sql`now()`),
+}, (t) => [
+  index("idx_chat_sessions_user").on(t.userId, t.updatedAt),
+]);
+
 // ── chat_messages ─────────────────────────────────────────────
 export const chatMessages = pgTable("chat_messages", {
   id:        bigserial("id", { mode: "number" }).primaryKey(),
   userId:    uuid("user_id").notNull(),
+  sessionId: uuid("session_id").references(() => chatSessions.id, { onDelete: "cascade" }),
   role:      text("role").notNull(),
   content:   text("content").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`now()`),
 }, (t) => [
-  index("idx_chat_messages_user").on(t.userId, t.createdAt),
+  index("idx_chat_messages_session").on(t.sessionId, t.createdAt),
 ]);
 
 // ── ai_providers ──────────────────────────────────────────────

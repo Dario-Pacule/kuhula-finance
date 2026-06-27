@@ -349,11 +349,34 @@ export async function deleteStrategy(userId: string, strategyId: string) {
 }
 
 // ─────────────────────────────────────────────
-// SAVE CHAT HISTORY
+// CHAT SESSIONS & HISTORY
 // ─────────────────────────────────────────────
+
+export async function loadChatSessions(userId: string) {
+  const { data, error } = await supabaseAdmin
+    .from("chat_sessions")
+    .select("id, title, updated_at")
+    .eq("user_id", userId)
+    .order("updated_at", { ascending: false });
+
+  if (error) return [];
+  return data;
+}
+
+export async function createChatSession(userId: string, title: string = "Nova Conversa"): Promise<string> {
+  const { data, error } = await supabaseAdmin
+    .from("chat_sessions")
+    .insert({ user_id: userId, title })
+    .select("id")
+    .single();
+
+  if (error) throw error;
+  return data.id as string;
+}
 
 export async function saveChatMessages(
   userId: string,
+  sessionId: string,
   messages: Array<{ role: "user" | "model"; content: string }>
 ) {
   if (!messages.length) return;
@@ -361,22 +384,31 @@ export async function saveChatMessages(
   const { error } = await supabaseAdmin.from("chat_messages").insert(
     messages.map((m) => ({
       user_id: userId,
+      session_id: sessionId,
       role: m.role,
       content: m.content,
     }))
   );
 
   if (error) throw error;
+
+  // Atualizar o updated_at da sessão
+  await supabaseAdmin
+    .from("chat_sessions")
+    .update({ updated_at: new Date().toISOString() })
+    .eq("id", sessionId);
 }
 
 export async function loadChatHistory(
   userId: string,
+  sessionId: string,
   limit = 60
 ): Promise<Array<{ role: "user" | "model"; content: string }>> {
   const { data, error } = await supabaseAdmin
     .from("chat_messages")
     .select("role, content")
     .eq("user_id", userId)
+    .eq("session_id", sessionId)
     .order("created_at", { ascending: false })
     .limit(limit);
 
@@ -387,11 +419,13 @@ export async function loadChatHistory(
   }>;
 }
 
-export async function clearChatHistory(userId: string) {
+export async function clearChatHistory(userId: string, sessionId: string) {
+  // Se apagarmos a sessão, as mensagens são apagadas em cascata
   await supabaseAdmin
-    .from("chat_messages")
+    .from("chat_sessions")
     .delete()
-    .eq("user_id", userId);
+    .eq("user_id", userId)
+    .eq("id", sessionId);
 }
 
 // ─────────────────────────────────────────────
