@@ -208,7 +208,7 @@ export default function Home() {
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
 
   // Hook de persistência (Supabase + localStorage fallback)
-  const { persistAction, persistChatMessages, saveAiConfig, clearRemoteData } = usePersistence({
+  const { userId, persistAction, persistChatMessages, saveAiConfig, clearRemoteData } = usePersistence({
     onStateLoaded: (loadedState) => setState(loadedState),
     onChatHistoryLoaded: (records) => {
       const chatMessages = records.map(r => ({
@@ -236,15 +236,15 @@ export default function Home() {
 
   // Inicializar ChatLogQueue quando userId estiver disponível
   useEffect(() => {
-    if (!session?.user?.id) return;
-    initChatLogQueue(session.user.id, provider, model);
+    if (!userId.current) return;
+    initChatLogQueue(userId.current, provider, model);
 
     // Flush ao fechar a página
     const handleUnload = () => { flushNow(); };
     window.addEventListener("beforeunload", handleUnload);
     return () => window.removeEventListener("beforeunload", handleUnload);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.user?.id, provider, model]);
+  }, [userId.current, provider, model]);
 
   // Inicialização (Client-side)
   useEffect(() => {
