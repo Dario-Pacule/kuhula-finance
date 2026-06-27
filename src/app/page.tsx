@@ -15,6 +15,7 @@ import {
   History,
   MessageSquare,
   X,
+  Pencil,
   EyeOff, 
   Download, 
   Upload, 
@@ -214,7 +215,7 @@ export default function Home() {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
 
   // Hook de persistência (Supabase + localStorage fallback)
-  const { userId, persistAction, persistChatMessages, saveAiConfig, clearRemoteData, createNewChatSession, switchChatSession } = usePersistence({
+  const { userId, persistAction, persistChatMessages, saveAiConfig, clearRemoteData, createNewChatSession, switchChatSession, renameSession } = usePersistence({
     onStateLoaded: (loadedState) => setState(loadedState),
     onSessionsLoaded: (sessions) => setChatSessions(sessions),
     onActiveSessionLoaded: (sessionId) => setActiveSessionId(sessionId),
@@ -3271,15 +3272,31 @@ ${sessionSummary ? `\n### CONTEXTO DA CONVERSA ACTUAL\n${sessionSummary}` : ""}`
                   <p className="text-xs text-zinc-500 text-center py-4">Sem histórico anterior.</p>
                 )}
                 {chatSessions.map((session) => (
-                  <Button
-                    key={session.id}
-                    variant="ghost"
-                    className={`w-full justify-start text-left text-sm ${activeSessionId === session.id ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-400 hover:text-zinc-300 hover:bg-zinc-900'}`}
-                    onClick={() => { switchChatSession(session.id); setIsDrawerOpen(false); }}
-                  >
-                    <MessageSquare className="w-4 h-4 mr-2 shrink-0 opacity-50" />
-                    <span className="truncate">{session.title}</span>
-                  </Button>
+                  <div key={session.id} className="flex group w-full">
+                    <Button
+                      variant="ghost"
+                      className={`flex-1 justify-start text-left text-sm rounded-r-none ${activeSessionId === session.id ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-400 hover:text-zinc-300 hover:bg-zinc-900'}`}
+                      onClick={() => { switchChatSession(session.id); setIsDrawerOpen(false); }}
+                    >
+                      <MessageSquare className="w-4 h-4 mr-2 shrink-0 opacity-50" />
+                      <span className="truncate">{session.title}</span>
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className={`rounded-l-none border-l border-zinc-800/50 ${activeSessionId === session.id ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900 opacity-0 group-hover:opacity-100'}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const newTitle = window.prompt("Novo nome para a conversa:", session.title);
+                        if (newTitle && newTitle.trim() !== "" && newTitle !== session.title) {
+                          renameSession(session.id, newTitle.trim());
+                        }
+                      }}
+                      title="Renomear conversa"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
                 ))}
               </div>
             </div>

@@ -354,7 +354,7 @@ export async function deleteStrategy(userId: string, strategyId: string) {
 
 export async function loadChatSessions(userId: string) {
   const { data, error } = await supabaseAdmin
-    .from("chat_sessions")
+    .from("chat_threads")
     .select("id, title, updated_at")
     .eq("user_id", userId)
     .order("updated_at", { ascending: false });
@@ -365,13 +365,23 @@ export async function loadChatSessions(userId: string) {
 
 export async function createChatSession(userId: string, title: string = "Nova Conversa"): Promise<string> {
   const { data, error } = await supabaseAdmin
-    .from("chat_sessions")
+    .from("chat_threads")
     .insert({ user_id: userId, title })
     .select("id")
     .single();
 
   if (error) throw error;
   return data.id as string;
+}
+
+export async function renameChatSession(userId: string, sessionId: string, newTitle: string) {
+  const { error } = await supabaseAdmin
+    .from("chat_threads")
+    .update({ title: newTitle, updated_at: new Date().toISOString() })
+    .eq("user_id", userId)
+    .eq("id", sessionId);
+
+  if (error) throw error;
 }
 
 export async function saveChatMessages(
@@ -394,7 +404,7 @@ export async function saveChatMessages(
 
   // Atualizar o updated_at da sessão
   await supabaseAdmin
-    .from("chat_sessions")
+    .from("chat_threads")
     .update({ updated_at: new Date().toISOString() })
     .eq("id", sessionId);
 }
@@ -422,7 +432,7 @@ export async function loadChatHistory(
 export async function clearChatHistory(userId: string, sessionId: string) {
   // Se apagarmos a sessão, as mensagens são apagadas em cascata
   await supabaseAdmin
-    .from("chat_sessions")
+    .from("chat_threads")
     .delete()
     .eq("user_id", userId)
     .eq("id", sessionId);

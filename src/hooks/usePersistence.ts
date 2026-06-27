@@ -314,6 +314,28 @@ export function usePersistence({
     return null;
   }, [onActiveSessionLoaded, onChatHistoryLoaded, startSync, endSync]);
 
+  const renameSession = useCallback(async (sessionId: string, newTitle: string) => {
+    startSync();
+    let success = false;
+    try {
+      const res = await fetch("/api/chat-sessions", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: userIdRef.current, sessionId, title: newTitle }),
+      });
+      if (res.ok) {
+        await loadChatSessions(); // Reload sessions to get updated title
+        success = true;
+        return true;
+      }
+    } catch (e: any) {
+      log.error("chat", "Excepção em renameSession", e?.message);
+    } finally {
+      endSync(success);
+    }
+    return false;
+  }, [startSync, endSync]);
+
   const persistChatMessages = useCallback(async (newMessages: ChatMessageRecord[]) => {
     if (!newMessages.length) return;
     
@@ -370,6 +392,7 @@ export function usePersistence({
     saveAiConfig, 
     clearRemoteData,
     createNewChatSession,
-    switchChatSession
+    switchChatSession,
+    renameSession
   };
 }

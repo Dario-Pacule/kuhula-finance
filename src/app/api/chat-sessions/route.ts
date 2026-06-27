@@ -31,3 +31,20 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
+
+export async function PATCH(req: Request) {
+  const body = await req.json().catch(() => ({}));
+  const userId = await resolveUserId(body.userId);
+  
+  if (!userId || !body.sessionId || !body.title) {
+    return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+  }
+
+  try {
+    const { renameChatSession } = await import("@/lib/db");
+    await renameChatSession(userId, body.sessionId, body.title);
+    return NextResponse.json({ success: true });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}
