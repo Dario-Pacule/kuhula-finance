@@ -236,15 +236,15 @@ export default function Home() {
 
   // Inicializar ChatLogQueue quando userId estiver disponível
   useEffect(() => {
-    if (!userId.current) return;
-    initChatLogQueue(userId.current, provider, model);
+    if (!session?.user?.id) return;
+    initChatLogQueue(session.user.id, provider, model);
 
     // Flush ao fechar a página
     const handleUnload = () => { flushNow(); };
     window.addEventListener("beforeunload", handleUnload);
     return () => window.removeEventListener("beforeunload", handleUnload);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId.current]);
+  }, [session?.user?.id, provider, model]);
 
   // Inicialização (Client-side)
   useEffect(() => {
