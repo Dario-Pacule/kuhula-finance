@@ -1202,31 +1202,24 @@ ${currentState.goals.length > 0 ? currentState.goals.map(g => `- ${g.title}: ${g
 ${JSON.stringify(recentTxs)}
 ${sessionSummary ? `\n### CONTEXTO DA CONVERSA ACTUAL\n${sessionSummary}` : ""}`;
 
-    // Histórico ampliado: 50 mensagens (25 turnos) para manter contexto conversacional longo
+    // Histórico: mantém parts[] nativo do Gemini (não converte para content string)
     const validHistory = history
       .filter(msg => msg.role === "user" || msg.role === "model")
       .slice(-50);
 
     const res = await fetch("/api/chat", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        history: validHistory.map(m => ({
-          role: m.role,
-          content: m.parts?.[0]?.text ?? "",
-        })),
+        history: validHistory,
         systemInstruction,
-        provider,
         model,
-        clientApiKey
-      })
+        clientApiKey,
+      }),
     });
 
     const data = await res.json();
 
-    // Se a API route devolveu um erro, lança-o para o catch do handleSendMessage
     if (!res.ok || data.error) {
       throw new Error(data.error ?? `Erro HTTP ${res.status}`);
     }
@@ -1393,119 +1386,91 @@ ${sessionSummary ? `\n### CONTEXTO DA CONVERSA ACTUAL\n${sessionSummary}` : ""}`
   };
 
   const handleAIResponse = async (aiData: any, currentHistory: ChatMessage[], currentState: AppState) => {
-    let { text, toolCalls, usage } = aiData;
+    const { text, toolCallsMade = [], askUserInput, usage } = aiData;
 
     log.info("ai", "Resposta recebida", {
       hasText: !!text,
-      textPreview: text ? text.substring(0, 100) + (text.length > 100 ? "..." : "") : null,
-      toolCalls: toolCalls?.map((t: any) => t.name)
+      textPreview: text ? text.substring(0, 80) : null,
+      toolCallsMade: toolCallsMade.map((t: any) => t.name),
+      hasAskUserInput: !!askUserInput,
     });
 
-    if (usage) {
-      updateTokenStats(usage.promptTokens ?? 0, usage.completionTokens ?? 0);
-    }
+    if (usage) updateTokenStats(usage.promptTokens ?? 0, usage.completionTokens ?? 0);
 
-    if (text && !toolCalls?.length) {
-      const extracted = extractEmbeddedToolCalls(text);
-      if (extracted.toolCalls.length > 0) {
-        text = extracted.cleanText.trim();
-        toolCalls = extracted.toolCalls;
-      }
-    }
-
-    if (toolCalls && toolCalls.length > 0) {
-      const askInputCall = toolCalls.find((tc: any) => tc.name === "askUserInput");
-      if (askInputCall) {
-        const interactiveMsg: ChatMessage = {
-          role: "interactive",
-          parts: [{ text: "" }],
-          interactiveInput: { args: askInputCall.args as AskUserInputArgs },
-          timestamp: new Date().toISOString(),
-        };
-        setMessages(prev => [...prev, interactiveMsg]);
-        setIsTyping(false);
-        return;
-      }
-
-      const financialCalls = toolCalls.filter((tc: any) => FINANCIAL_TOOLS.has(tc.name));
-      const silentCalls = toolCalls.filter((tc: any) => !FINANCIAL_TOOLS.has(tc.name));
-
-      let stateToMutate = { ...currentState };
-      const toolResponseParts: any[] = [];
-
-      for (const tc of silentCalls) {
-        const executionResult = executeToolAction(tc.name, tc.args, stateToMutate);
+    // 1. Tools silenciosas executadas no backend (ex: updateUserProfile)
+    let stateToMutate = { ...currentState };
+    for (const tc of toolCallsMade) {
+      if (tc.result === "pending_confirmation") continue;
+      addSystemLog(`IA actualizou: **${tc.name}**`);
+      const executionResult = executeToolAction(tc.name, tc.args, stateToMutate);
+      if (executionResult.newState !== stateToMutate) {
         stateToMutate = executionResult.newState;
-        const dbAction = toolCallToPersistAction(tc.name, tc.args, executionResult.newState);
+        saveState(stateToMutate);
+        const dbAction = toolCallToPersistAction(tc.name, tc.args, stateToMutate);
         if (dbAction) persistAction(dbAction, stateToMutate);
-        
-        toolResponseParts.push({
-          functionResponse: { name: tc.name, response: executionResult.result }
-        });
       }
-      if (silentCalls.length > 0) saveState(stateToMutate);
+    }
 
-      if (financialCalls.length > 0) {
-        setPendingConfirmation({
-          toolCalls: financialCalls,
-          history: currentHistory,
-          appState: stateToMutate,
-        });
-
-        const summaryLines = financialCalls.map((tc: any) => describeToolCall(tc.name, tc.args)).join("\n");
-        const question = financialCalls.length === 1
-          ? "Posso registar esta operação?"
-          : `Posso registar estas ${financialCalls.length} operações?`;
-
-        const confirmMsg: ChatMessage = {
-          role: "interactive",
-          parts: [{ text: summaryLines }],
-          interactiveInput: {
-            args: { question, inputType: "confirm" },
-          },
-          isPendingFinancial: true,
-          timestamp: new Date().toISOString(),
-        };
-        setMessages(prev => [...prev, confirmMsg]);
-        setIsTyping(false);
-        return; 
+    // 2. askUserInput → mostra componente interactivo
+    if (askUserInput) {
+      if (text) {
+        const textMsg: ChatMessage = { role: "model", parts: [{ text }], timestamp: new Date().toISOString() };
+        setMessages(prev => [...prev, textMsg]);
       }
-
-      // Se só houve chamadas silenciosas, faz a segunda chamada à IA para gerar a resposta final
-      const toolNames = silentCalls.map((tc: any) => tc.name).join(", ");
-      const toolMsgText = `[Sistema: A ferramenta silenciosa ${toolNames} foi executada em background e o estado foi actualizado. Continua a conversa normalmente respondendo à última intenção do utilizador.]`;
-      const toolMsg: ChatMessage = { role: "user", parts: [{ text: toolMsgText }] };
-      const finalHistory = [...currentHistory, toolMsg];
-
-      setIsTyping(true);
-      const secondRes = await callChatAPI(finalHistory, stateToMutate);
+      const interactiveMsg: ChatMessage = {
+        role: "interactive",
+        parts: [{ text: "" }],
+        interactiveInput: { args: askUserInput as AskUserInputArgs },
+        timestamp: new Date().toISOString(),
+      };
+      setMessages(prev => [...prev, interactiveMsg]);
       setIsTyping(false);
+      return;
+    }
 
-      if (secondRes.text) {
-        const modelMsg: ChatMessage = { role: "model", parts: [{ text: secondRes.text }], timestamp: new Date().toISOString() };
-        setMessages(prev => [...prev, modelMsg]);
-        // Persiste com o histórico real (sem a mensagem interna [Sistema:])
-        const userMsg = currentHistory[currentHistory.length - 1];
-        saveChatHistory([...currentHistory, modelMsg], [
-          ...(userMsg?.parts?.[0]?.text && !userMsg.parts[0].text.startsWith("[Sistema:") ? [{ role: "user" as const, content: userMsg.parts[0].text }] : []),
-          { role: "model" as const, content: secondRes.text },
-        ]);
+    // 3. Tools financeiras pendentes → pede confirmação
+    const pendingTools = toolCallsMade.filter((tc: any) => tc.result === "pending_confirmation");
+    if (pendingTools.length > 0) {
+      if (text) {
+        const textMsg: ChatMessage = { role: "model", parts: [{ text }], timestamp: new Date().toISOString() };
+        setMessages(prev => [...prev, textMsg]);
       }
-      if (secondRes.usage) {
-        updateTokenStats(secondRes.usage.promptTokens, secondRes.usage.completionTokens);
-      }
-    } else if (text) {
+      setPendingConfirmation({
+        toolCalls: pendingTools,
+        history: currentHistory,
+        appState: stateToMutate,
+      });
+      const summaryLines = pendingTools.map((tc: any) => describeToolCall(tc.name, tc.args)).join("\n");
+      const question = pendingTools.length === 1
+        ? "Posso registar esta operação?"
+        : `Posso registar estas ${pendingTools.length} operações?`;
+      const confirmMsg: ChatMessage = {
+        role: "interactive",
+        parts: [{ text: summaryLines }],
+        interactiveInput: { args: { question, inputType: "confirm" } },
+        isPendingFinancial: true,
+        timestamp: new Date().toISOString(),
+      };
+      setMessages(prev => [...prev, confirmMsg]);
+      setIsTyping(false);
+      return;
+    }
+
+    // 4. Resposta de texto simples
+    if (text) {
       const modelMsg: ChatMessage = { role: "model", parts: [{ text }], timestamp: new Date().toISOString() };
       setMessages(prev => [...prev, modelMsg]);
       const userMsg = currentHistory[currentHistory.length - 1];
       saveChatHistory([...currentHistory, modelMsg], [
-        ...(userMsg?.parts?.[0]?.text ? [{ role: "user" as const, content: userMsg.parts[0].text }] : []),
+        ...(userMsg?.parts?.[0]?.text && !userMsg.parts[0].text.startsWith("[Sistema:")
+          ? [{ role: "user" as const, content: userMsg.parts[0].text }]
+          : []),
         { role: "model" as const, content: text },
       ]);
     }
   };
 
-  // Mapeia uma tool call para uma PersistAction atómica
+    // Mapeia uma tool call para uma PersistAction atómica
   const toolCallToPersistAction = (name: string, args: any, newState: AppState): PersistAction | null => {
     switch (name) {
       case "addTransaction": {
