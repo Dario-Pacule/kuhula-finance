@@ -223,6 +223,7 @@ export default function Home() {
       const chatMessages = records.map(r => ({
         role: r.role as "user" | "model",
         parts: [{ text: r.content }],
+        timestamp: r.timestamp,
       }));
       setMessages(chatMessages);
     },
