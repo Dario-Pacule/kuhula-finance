@@ -70,6 +70,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AppState, Goal, ChatMessage, AskUserInputArgs } from "@/types";
 import { log } from "@/lib/logger";
+import { initChatLogQueue, pushChatEvent, flushNow, getChatSessionId } from "@/lib/ChatLogQueue";
 import { ChatInteractiveInput } from "@/components/ChatInteractiveInput";
 import { RichChatInput } from "@/components/RichChatInput";
 import { RuntimeLogsPanel } from "@/components/RuntimeLogsPanel";
@@ -232,6 +233,18 @@ export default function Home() {
     onSyncStatusChange: (status) => setSyncStatus(status),
     onChatHistoryLoadComplete: () => setIsChatHistoryLoading(false),
   });
+
+  // Inicializar ChatLogQueue quando userId estiver disponível
+  useEffect(() => {
+    if (!userId.current) return;
+    initChatLogQueue(userId.current, provider, model);
+
+    // Flush ao fechar a página
+    const handleUnload = () => { flushNow(); };
+    window.addEventListener("beforeunload", handleUnload);
+    return () => window.removeEventListener("beforeunload", handleUnload);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId.current]);
 
   // Inicialização (Client-side)
   useEffect(() => {
@@ -864,19 +877,27 @@ export default function Home() {
 
   // Quando o utilizador responde a um input interactivo da IA
   const handleInteractiveAnswer = (msgIndex: number, answer: string) => {
-    // Marca a mensagem como respondida
     setMessages(prev => prev.map((m, i) =>
       i === msgIndex && m.role === "interactive"
         ? { ...m, interactiveInput: { ...m.interactiveInput!, answered: true, answeredValue: answer } }
         : m
     ));
 
-    // Se é uma confirmação de operação financeira, encaminha para o handler próprio
+    // Log: resposta ao askUserInput
     const msg = messages[msgIndex];
+    if (!msg?.isPendingFinancial) {
+      pushChatEvent({
+        eventType: "tool_answered",
+        toolName: "askUserInput",
+        content: answer,
+        provider,
+        model,
+      });
+    }
+
     if (msg?.isPendingFinancial) {
       handleFinancialConfirmation(answer === "Sim");
     } else {
-      // Envia a resposta como mensagem do utilizador para a IA continuar
       handleSendMessage(answer);
     }
   };
@@ -947,12 +968,19 @@ export default function Home() {
 
     log.info("chat", "Mensagem enviada", { text: text.substring(0, 100) + (text.length > 100 ? "..." : "") });
 
+    // Log: mensagem do utilizador
+    pushChatEvent({
+      eventType: "user_message",
+      content: text,
+      provider,
+      model,
+    });
+
     const newHistory: ChatMessage[] = [
       ...messages,
       { role: "user", parts: [{ text }], timestamp: new Date().toISOString() }
     ];
 
-    // Atualiza chat UI com texto limpo
     setMessages(prev => [
       ...prev,
       { role: "user", parts: [{ text }], timestamp: new Date().toISOString() }
@@ -971,9 +999,11 @@ export default function Home() {
     }
 
     setIsTyping(true);
+    const requestStart = Date.now();
 
     try {
       const response = await callChatAPI(newHistory, state);
+      const latencyMs = Date.now() - requestStart;
       setIsTyping(false);
 
       if (response.error) {
@@ -986,6 +1016,40 @@ export default function Home() {
           response.usageMetadata.promptTokenCount || 0,
           response.usageMetadata.candidatesTokenCount || 0
         );
+      }
+
+      // Log: resposta da IA
+      pushChatEvent({
+        eventType: "ai_response",
+        content: response.text ?? "",
+        latencyMs,
+        promptTokens: response.usage?.promptTokens,
+        completionTokens: response.usage?.completionTokens,
+        provider,
+        model,
+      });
+
+      // Log: tool calls feitas
+      for (const tc of (response.toolCallsMade ?? [])) {
+        pushChatEvent({
+          eventType: "tool_call",
+          toolName: tc.name,
+          toolArgs: tc.args,
+          toolResult: tc.result,
+          provider,
+          model,
+        });
+      }
+
+      // Log: askUserInput
+      if (response.askUserInput) {
+        pushChatEvent({
+          eventType: "tool_input",
+          toolName: "askUserInput",
+          toolArgs: response.askUserInput,
+          provider,
+          model,
+        });
       }
 
       await handleAIResponse(response, newHistory, state);
@@ -1008,6 +1072,16 @@ export default function Home() {
       const friendlyMessage = is429
         ? `⚡ **Limite de pedidos atingido** no provider **${provider}**.\n\nO plano gratuito tem um limite de pedidos por minuto. Aguarda alguns segundos e tenta novamente, ou muda de provider nas configurações ⚙️.`
         : `Ocorreu um erro ao contactar o provider **${provider}**:\n\`${errorDetail}\`\n\nVerifica as configurações ⚙️ — chave de API e modelo seleccionado.`;
+
+      // Log: erro de IA
+      pushChatEvent({
+        eventType: "ai_error",
+        errorCode: is429 ? "429" : "unknown",
+        errorMessage: errorDetail,
+        latencyMs: Date.now() - requestStart,
+        provider,
+        model,
+      });
 
       // Mostra erro no chat com opção de reenvio
       setMessages(prev => [
@@ -1334,6 +1408,16 @@ ${sessionSummary ? `\n### CONTEXTO DA CONVERSA ACTUAL\n${sessionSummary}` : ""}`
 
     if (!confirmed) {
       addSystemLog("Operação cancelada pelo utilizador.");
+      // Log: cancelamento
+      for (const tc of toolCalls) {
+        pushChatEvent({
+          eventType: "tool_cancelled",
+          toolName: tc.name,
+          toolArgs: tc.args,
+          provider,
+          model,
+        });
+      }
       await handleSendMessage("Não, cancelei. Não registar por agora.");
       return;
     }
@@ -1349,6 +1433,16 @@ ${sessionSummary ? `\n### CONTEXTO DA CONVERSA ACTUAL\n${sessionSummary}` : ""}`
 
       const dbAction = toolCallToPersistAction(tc.name, tc.args, executionResult.newState);
       if (dbAction) persistAction(dbAction, stateToMutate);
+
+      // Log: confirmação
+      pushChatEvent({
+        eventType: "tool_confirmed",
+        toolName: tc.name,
+        toolArgs: tc.args,
+        toolResult: executionResult.result,
+        provider,
+        model,
+      });
 
       toolResponseParts.push({
         functionResponse: { name: tc.name, response: executionResult.result }
