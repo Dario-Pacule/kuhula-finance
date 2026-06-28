@@ -48,6 +48,7 @@ export type PersistAction =
 export interface ChatMessageRecord {
   role: "user" | "model";
   content: string;
+  timestamp?: string;
 }
 
 export interface ChatSession {
