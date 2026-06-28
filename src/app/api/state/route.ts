@@ -3,21 +3,12 @@ import { getAuthenticatedUserId } from "@/lib/auth-server";
 import {
   loadUserState, upsertAccount, deleteAccount,
   insertTransaction, deleteTransaction, upsertGoal, deleteGoal,
-  upsertBudgetLimit, upsertStrategy, deleteStrategy, upsertUserProfile,
+  upsertBudgetLimit, upsertStrategy, deleteStrategy,
 } from "@/lib/db";
 import { supabaseAdmin } from "@/lib/supabase";
 
-// Resolve userId: session real > fallback do body (dev sem auth)
-async function resolveUserId(body?: any): Promise<string | null> {
-  const sessionId = await getAuthenticatedUserId();
-  if (sessionId) return sessionId;
-  // Fallback para desenvolvimento local sem auth configurado
-  return body?.userId ?? null;
-}
-
-export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url);
-  const userId = await resolveUserId({ userId: searchParams.get("userId") });
+export async function GET() {
+  const userId = await getAuthenticatedUserId();
   if (!userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
 
   try {
@@ -29,13 +20,13 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  const userId = await getAuthenticatedUserId();
+  if (!userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+
   let body: any;
   try { body = await req.json(); } catch {
     return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
   }
-
-  const userId = await resolveUserId(body);
-  if (!userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
 
   const { action, payload } = body;
   if (!action) return NextResponse.json({ error: "action obrigatório" }, { status: 400 });
@@ -51,7 +42,6 @@ export async function POST(req: Request) {
       case "upsert_budget_limit":  await upsertBudgetLimit(userId, payload.category, payload.limitAmount); break;
       case "upsert_strategy":      await upsertStrategy(userId, payload.strategy); break;
       case "delete_strategy":      await deleteStrategy(userId, payload.id); break;
-      case "update_user_profile":  await upsertUserProfile(userId, payload.profile); break;
       case "clear_all": {
         const now = new Date().toISOString();
         await Promise.all([
@@ -61,7 +51,6 @@ export async function POST(req: Request) {
           supabaseAdmin.from("strategies").update({ status: "deleted", archived_at: now }).eq("user_id", userId),
           supabaseAdmin.from("chat_sessions").update({ status: "deleted", archived_at: now }).eq("user_id", userId),
           supabaseAdmin.from("chat_messages").update({ status: "deleted" }).eq("user_id", userId),
-          // budget_limits não tem status — mantém (são configurações)
         ]);
         break;
       }

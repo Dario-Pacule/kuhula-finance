@@ -1,23 +1,9 @@
-/**
- * GET  /api/ai-config  — carrega provider, model e api_key do utilizador
- * POST /api/ai-config  — guarda provider, model e api_key
- *
- * A chave é guardada em texto simples na coluna api_key_encrypted.
- * Para produção real, usar Supabase Vault para encriptação at-rest.
- * A RLS garante que só o próprio utilizador acede à sua chave.
- */
-
 import { NextResponse } from "next/server";
 import { getAuthenticatedUserId } from "@/lib/auth-server";
 import { supabaseAdmin } from "@/lib/supabase";
 
-async function resolveUserId(fallback?: string | null): Promise<string | null> {
-  return (await getAuthenticatedUserId()) ?? fallback ?? null;
-}
-
-export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url);
-  const userId = await resolveUserId(searchParams.get("userId"));
+export async function GET() {
+  const userId = await getAuthenticatedUserId();
   if (!userId) return NextResponse.json({ config: null });
 
   const { data, error } = await supabaseAdmin
@@ -39,10 +25,10 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const body = await req.json().catch(() => ({}));
-  const userId = await resolveUserId(body.userId);
+  const userId = await getAuthenticatedUserId();
   if (!userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
 
+  const body = await req.json().catch(() => ({}));
   const { provider, model, apiKey, submitOnEnter } = body;
 
   const { error } = await supabaseAdmin

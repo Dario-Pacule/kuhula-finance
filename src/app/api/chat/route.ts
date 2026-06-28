@@ -20,6 +20,8 @@
  */
 
 import { NextResponse } from "next/server";
+import { getAuthenticatedUserId } from "@/lib/auth-server";
+import { supabaseAdmin } from "@/lib/supabase";
 
 // ─────────────────────────────────────────────────────────────
 // TIPOS
@@ -409,9 +411,20 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
   }
 
-  const { history, systemInstruction, model, clientApiKey, additionalContext } = body;
+  const { history, systemInstruction, model, additionalContext } = body;
 
-  const apiKey = clientApiKey || process.env.GEMINI_API_KEY;
+  // Chave API lida server-side da DB — nunca aceite do browser
+  const userId = await getAuthenticatedUserId();
+  let apiKey = process.env.GEMINI_API_KEY ?? "";
+
+  if (userId) {
+    const { data } = await supabaseAdmin
+      .from("ai_providers")
+      .select("api_key_encrypted")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (data?.api_key_encrypted) apiKey = data.api_key_encrypted;
+  }
 
   if (!apiKey) {
     return NextResponse.json(

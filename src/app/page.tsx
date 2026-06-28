@@ -609,7 +609,6 @@ export default function Home() {
           systemInstruction: "Responde apenas com: ok",
           provider,
           model,
-          clientApiKey,
         }),
       });
       const data = await res.json();
@@ -1306,8 +1305,7 @@ ${sessionSummary ? `\n### CONTEXTO DA CONVERSA ACTUAL\n${sessionSummary}` : ""}`
         history: validHistory,
         systemInstruction,
         model,
-        clientApiKey,
-        // Contexto completo disponível para requestContext tool
+        // clientApiKey removido — lido server-side da DB
         additionalContext: {
           transactions: currentState.transactions,
           goals: currentState.goals,
