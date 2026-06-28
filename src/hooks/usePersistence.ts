@@ -46,6 +46,7 @@ export type PersistAction =
   | { action: "clear_all";            payload: Record<string, never> };
 
 export interface ChatMessageRecord {
+  id?: number;
   role: "user" | "model";
   content: string;
   timestamp?: string;
@@ -252,6 +253,8 @@ export function usePersistence({
 
   const switchChatSession = useCallback(async (sessionId: string) => {
     activeSessionIdRef.current = sessionId;
+    // Persistir sessão activa no localStorage para sobreviver ao refresh
+    localStorage.setItem("kuhula_active_session", sessionId);
     onActiveSessionLoaded(sessionId);
     startSync();
     let success = false;
@@ -277,8 +280,10 @@ export function usePersistence({
     try {
       const sessions = await loadChatSessions();
       if (sessions.length > 0) {
-        const latestSession = sessions[0];
-        await switchChatSession(latestSession.id);
+        // Restaurar a última sessão activa do localStorage
+        const savedSessionId = localStorage.getItem("kuhula_active_session");
+        const targetSession = sessions.find((s: any) => s.id === savedSessionId) ?? sessions[0];
+        await switchChatSession(targetSession.id);
       } else {
         onChatHistoryLoaded([]);
         onChatHistoryLoadComplete?.();
@@ -299,20 +304,28 @@ export function usePersistence({
         body: JSON.stringify({ userId: userIdRef.current, title }),
       });
       if (res.ok) {
-        const { sessionId } = await res.json();
+        const data = await res.json();
+        if (data.error) {
+          log.warn("chat", "Erro ao criar sessão", data.error);
+          return { error: data.error };
+        }
+        const sessionId = data.sessionId;
         activeSessionIdRef.current = sessionId;
+        localStorage.setItem("kuhula_active_session", sessionId);
         onActiveSessionLoaded(sessionId);
         onChatHistoryLoaded([]);
-        loadChatSessions(); // recarregar a lista
+        loadChatSessions();
         success = true;
-        return sessionId;
+        return { sessionId };
       }
+      const err = await res.json().catch(() => ({}));
+      return { error: err.error ?? "Erro ao criar sessão" };
     } catch (e: any) {
       log.error("chat", "Excepção em createNewChatSession", e?.message);
+      return { error: e?.message };
     } finally {
       endSync(success);
     }
-    return null;
   }, [onActiveSessionLoaded, onChatHistoryLoaded, startSync, endSync]);
 
   const renameSession = useCallback(async (sessionId: string, newTitle: string) => {
@@ -324,26 +337,31 @@ export function usePersistence({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId: userIdRef.current, sessionId, title: newTitle }),
       });
-      if (res.ok) {
-        await loadChatSessions(); // Reload sessions to get updated title
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && !data.error) {
+        await loadChatSessions();
         success = true;
-        return true;
+        return { success: true };
       }
+      return { error: data.error ?? "Erro ao renomear" };
     } catch (e: any) {
       log.error("chat", "Excepção em renameSession", e?.message);
+      return { error: e?.message };
     } finally {
       endSync(success);
     }
-    return false;
   }, [startSync, endSync]);
 
   const persistChatMessages = useCallback(async (newMessages: ChatMessageRecord[]) => {
     if (!newMessages.length) return;
     
-    // Se não há sessão ativa, criar uma antes de guardar
+    // Se não há sessão ativa, criar uma antes de guardar (problema 3: só cria após 1ª mensagem)
     if (!activeSessionIdRef.current) {
-      const newId = await createNewChatSession();
-      if (!newId) return;
+      const result = await createNewChatSession();
+      if (!result || result.error || !result.sessionId) {
+        log.warn("chat", "Não foi possível criar sessão para guardar mensagens", result?.error);
+        return;
+      }
     }
 
     startSync();
@@ -387,13 +405,29 @@ export function usePersistence({
   }, [startSync, endSync]);
 
   return { 
-    userId: userIdRef, 
-    persistAction, 
-    persistChatMessages, 
-    saveAiConfig, 
+  const deleteMessage = useCallback(async (messageId: number) => {
+    try {
+      const res = await fetch("/api/chat-history", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: userIdRef.current, messageId }),
+      });
+      return res.ok;
+    } catch (e: any) {
+      log.error("chat", "Excepção em deleteMessage", e?.message);
+      return false;
+    }
+  }, []);
+
+  return {
+    userId: userIdRef,
+    persistAction,
+    persistChatMessages,
+    saveAiConfig,
     clearRemoteData,
     createNewChatSession,
     switchChatSession,
-    renameSession
+    renameSession,
+    deleteMessage,
   };
 }

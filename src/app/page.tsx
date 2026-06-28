@@ -215,7 +215,7 @@ export default function Home() {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
 
   // Hook de persistência (Supabase + localStorage fallback)
-  const { userId, persistAction, persistChatMessages, saveAiConfig, clearRemoteData, createNewChatSession, switchChatSession, renameSession } = usePersistence({
+  const { userId, persistAction, persistChatMessages, saveAiConfig, clearRemoteData, createNewChatSession, switchChatSession, renameSession, deleteMessage } = usePersistence({
     onStateLoaded: (loadedState) => setState(loadedState),
     onSessionsLoaded: (sessions) => setChatSessions(sessions),
     onActiveSessionLoaded: (sessionId) => setActiveSessionId(sessionId),
@@ -224,6 +224,7 @@ export default function Home() {
         role: r.role as "user" | "model",
         parts: [{ text: r.content }],
         timestamp: r.timestamp,
+        dbId: r.id,
       }));
       setMessages(chatMessages);
     },
@@ -2611,7 +2612,7 @@ ${sessionSummary ? `\n### CONTEXTO DA CONVERSA ACTUAL\n${sessionSummary}` : ""}`
                 return (
                   <div
                     key={i}
-                    className={`max-w-[85%] rounded-lg text-[12px] leading-relaxed ${
+                    className={`group max-w-[85%] rounded-lg text-[12px] leading-relaxed ${
                       isModel
                         ? `self-start border ${msg.isError ? "bg-red-950/30 border-red-900/50" : "bg-zinc-900 border-zinc-800"} text-zinc-100`
                         : "self-end bg-zinc-100 text-zinc-950 shadow-sm font-medium"
@@ -2619,11 +2620,29 @@ ${sessionSummary ? `\n### CONTEXTO DA CONVERSA ACTUAL\n${sessionSummary}` : ""}`
                   >
                     <div className="message-content p-3.5">
                       <div dangerouslySetInnerHTML={{ __html: formattedHtml }} />
-                      {msg.timestamp && (
-                        <div className={`mt-1 text-[9px] font-medium opacity-60 flex ${isModel ? "justify-start" : "justify-end"}`}>
-                          {new Date(msg.timestamp).toLocaleTimeString("pt-MZ", { hour: "2-digit", minute: "2-digit" })}
-                        </div>
-                      )}
+                      <div className={`mt-1 flex items-center gap-2 ${isModel ? "justify-start" : "justify-end"}`}>
+                        {msg.timestamp && (
+                          <span className="text-[9px] font-medium opacity-60">
+                            {new Date(msg.timestamp).toLocaleTimeString("pt-MZ", { hour: "2-digit", minute: "2-digit" })}
+                          </span>
+                        )}
+                        {/* Botão de eliminar — aparece no hover */}
+                        <button
+                          onClick={async () => {
+                            if (!msg.dbId) {
+                              // Mensagem só em memória — remove localmente
+                              setMessages(prev => prev.filter((_, idx) => idx !== i));
+                              return;
+                            }
+                            const ok = await deleteMessage(msg.dbId);
+                            if (ok) setMessages(prev => prev.filter((_, idx) => idx !== i));
+                          }}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity text-[9px] text-zinc-500 hover:text-red-400 px-1"
+                          title="Eliminar mensagem"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
                     </div>
                     {/* Botão de reenvio em mensagens de erro */}
                     {msg.isError && msg.retryText && (

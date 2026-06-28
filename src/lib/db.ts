@@ -413,20 +413,23 @@ export async function loadChatHistory(
   userId: string,
   sessionId: string,
   limit = 60
-): Promise<Array<{ role: "user" | "model"; content: string }>> {
+): Promise<Array<{ id: number; role: "user" | "model"; content: string; timestamp?: string }>> {
   const { data, error } = await supabaseAdmin
     .from("chat_messages")
-    .select("role, content")
+    .select("id, role, content, created_at")
     .eq("user_id", userId)
     .eq("session_id", sessionId)
+    .is("deleted_at", null)  // Excluir mensagens com soft delete
     .order("id", { ascending: false })
     .limit(limit);
 
   if (error) return [];
-  return (data ?? []).reverse() as Array<{
-    role: "user" | "model";
-    content: string;
-  }>;
+  return (data ?? []).reverse().map((m: any) => ({
+    id: m.id,
+    role: m.role as "user" | "model",
+    content: m.content,
+    timestamp: m.created_at,
+  }));
 }
 
 export async function clearChatHistory(userId: string, sessionId: string) {

@@ -88,4 +88,5 @@ export interface ChatMessage {
   /** Marcado em mensagens interactivas que representam uma confirmação de operação financeira */
   isPendingFinancial?: boolean;
   timestamp?: string;
+  dbId?: number;
 }
