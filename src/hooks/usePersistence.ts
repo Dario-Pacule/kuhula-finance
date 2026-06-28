@@ -66,7 +66,7 @@ interface UsePersistenceOptions {
   onActiveSessionLoaded: (sessionId: string) => void;
   onChatHistoryLoaded: (messages: ChatMessageRecord[]) => void;
   onAiConfigLoaded: (config: AiConfig) => void;
-  onSyncStatusChange?: (status: SyncStatus) => void;
+  onSyncStatusChange?: (status: SyncStatus, detail?: string) => void;
   onChatHistoryLoadComplete?: () => void;
 }
 
@@ -92,13 +92,19 @@ export function usePersistence({
     activeRequests.current++;
   }, [onSyncStatusChange]);
 
-  const endSync = useCallback((success: boolean) => {
+  const lastErrorDetail = useRef<string>("");
+
+  const endSync = useCallback((success: boolean, errorDetail?: string) => {
     activeRequests.current = Math.max(0, activeRequests.current - 1);
     if (!success) {
       hasError.current = true;
+      if (errorDetail) lastErrorDetail.current = errorDetail;
     }
     if (activeRequests.current === 0) {
-      onSyncStatusChange?.(hasError.current ? "error" : "synced");
+      onSyncStatusChange?.(
+        hasError.current ? "error" : "synced",
+        hasError.current ? lastErrorDetail.current : undefined
+      );
     }
   }, [onSyncStatusChange]);
 
@@ -153,6 +159,7 @@ export function usePersistence({
     log.info("persistence", `persistAction: ${op.action}`);
     startSync();
     let success = false;
+    let errorDetail: string | undefined;
     try {
       const res = await fetch("/api/state", {
         method: "POST",
@@ -160,15 +167,18 @@ export function usePersistence({
         body: JSON.stringify({ userId: userIdRef.current, ...op }),
       });
       const body = await res.json();
-      if (!res.ok || body.error) log.error("persistence", `persistAction ${op.action} falhou`, body.error);
-      else {
+      if (!res.ok || body.error) {
+        errorDetail = `${op.action}: ${body.error ?? `HTTP ${res.status}`}`;
+        log.error("persistence", `persistAction ${op.action} falhou`, body.error);
+      } else {
         log.debug("persistence", `persistAction ${op.action} OK`);
         success = true;
       }
     } catch (e: any) {
+      errorDetail = `${op.action}: ${e?.message}`;
       log.error("persistence", `Excepção em persistAction ${op.action}`, e?.message);
     } finally {
-      endSync(success);
+      endSync(success, errorDetail);
     }
   }, [startSync, endSync]);
 
@@ -386,7 +396,23 @@ export function usePersistence({
 
   // ── Limpar tudo ───────────────────────────────────────────────
 
-  const clearRemoteData = useCallback(async () => {
+  const clearRemoteData = useCallback(async (sessionId?: string) => {
+    if (sessionId) {
+      // Eliminar sessão específica (apaga mensagens em cascata via FK)
+      log.info("persistence", `A eliminar sessão ${sessionId.slice(0,8)}...`);
+      try {
+        await fetch("/api/chat-history", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId: userIdRef.current, sessionId }),
+        });
+        log.info("persistence", "Sessão eliminada");
+      } catch (e: any) {
+        log.error("persistence", "Erro ao eliminar sessão", e?.message);
+      }
+      return;
+    }
+    // Limpar todos os dados do utilizador
     log.info("persistence", "A limpar todos os dados do utilizador...");
     startSync();
     let success = false;

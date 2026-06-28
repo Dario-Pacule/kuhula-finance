@@ -115,6 +115,8 @@ export default function Home() {
   
   // Estados de Sincronização e Carregamento
   const [syncStatus, setSyncStatus] = useState<SyncStatus>("synced");
+  const [syncDetails, setSyncDetails] = useState<string[]>([]);
+  const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
   const [isChatHistoryLoading, setIsChatHistoryLoading] = useState<boolean>(true);
   const [isSavingSettings, setIsSavingSettings] = useState<boolean>(false);
 
@@ -241,7 +243,12 @@ export default function Home() {
         setInputSubmitOnEnter(config.submitOnEnter);
       }
     },
-    onSyncStatusChange: (status) => setSyncStatus(status),
+    onSyncStatusChange: (status, detail?) => {
+      setSyncStatus(status);
+      if (status === "error" && detail) {
+        setSyncDetails(prev => [...prev.slice(-9), `${new Date().toLocaleTimeString("pt-MZ")} — ${detail}`]);
+      }
+    },
     onChatHistoryLoadComplete: () => setIsChatHistoryLoading(false),
   });
 
@@ -2719,20 +2726,24 @@ ${sessionSummary ? `\n### CONTEXTO DA CONVERSA ACTUAL\n${sessionSummary}` : ""}`
             <div className="flex items-center justify-center w-9 h-9 rounded-md bg-zinc-50 text-zinc-950 shadow-sm">
               <Sprout className="w-4.5 h-4.5" />
             </div>
-            {/* Badge de estado — dot no canto inferior direito do ícone */}
-            <div className="absolute -bottom-0.5 -right-0.5">
+            {/* Badge de estado — clicável para ver detalhes */}
+            <button
+              onClick={() => setIsSyncModalOpen(true)}
+              className="absolute -bottom-0.5 -right-0.5 focus:outline-none"
+              title={syncStatus === "synced" ? "Sincronizado" : syncStatus === "syncing" ? "A sincronizar..." : "Erro de sincronização — clica para ver detalhes"}
+            >
               {syncStatus === "syncing" && (
-                <div className="w-3 h-3 rounded-full bg-zinc-950 flex items-center justify-center" title="A sincronizar...">
-                  <div className="w-2 h-2 rounded-full border border-zinc-400 border-t-transparent animate-spin" />
+                <div className="w-3.5 h-3.5 rounded-full bg-zinc-950 flex items-center justify-center">
+                  <div className="w-2.5 h-2.5 rounded-full border border-zinc-400 border-t-transparent animate-spin" />
                 </div>
               )}
               {syncStatus === "error" && (
-                <div className="w-3 h-3 rounded-full bg-red-500 border border-zinc-950" title="Erro de sincronização" />
+                <div className="w-3.5 h-3.5 rounded-full bg-red-500 border-2 border-zinc-950 animate-pulse" />
               )}
               {syncStatus === "synced" && (
-                <div className="w-3 h-3 rounded-full bg-emerald-500 border border-zinc-950" title="Sincronizado" />
+                <div className="w-3 h-3 rounded-full bg-emerald-500 border border-zinc-950" />
               )}
-            </div>
+            </button>
           </div>
           <div className="hidden sm:block">
             <h1 className="font-heading text-sm font-bold tracking-tight text-zinc-100">
@@ -3159,6 +3170,62 @@ ${sessionSummary ? `\n### CONTEXTO DA CONVERSA ACTUAL\n${sessionSummary}` : ""}`
         </DialogContent>
       </Dialog>
 
+      {/* Modal de estado de sincronização */}
+      <Dialog open={isSyncModalOpen} onOpenChange={setIsSyncModalOpen}>
+        <DialogContent className="bg-zinc-950 border border-zinc-800 text-zinc-50 sm:max-w-sm rounded-xl shadow-lg">
+          <DialogHeader>
+            <DialogTitle className="text-sm font-bold text-zinc-100 flex items-center gap-2">
+              {syncStatus === "synced" && <div className="w-3 h-3 rounded-full bg-emerald-500 shrink-0" />}
+              {syncStatus === "syncing" && <div className="w-3 h-3 rounded-full border-2 border-zinc-400 border-t-transparent animate-spin shrink-0" />}
+              {syncStatus === "error" && <div className="w-3 h-3 rounded-full bg-red-500 shrink-0" />}
+              {syncStatus === "synced" ? "Dados sincronizados" : syncStatus === "syncing" ? "A sincronizar..." : "Erro de sincronização"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-3 py-1">
+            {syncStatus === "synced" && (
+              <p className="text-[12px] text-zinc-400">Os teus dados estão guardados e actualizados na base de dados.</p>
+            )}
+            {syncStatus === "syncing" && (
+              <p className="text-[12px] text-zinc-400">A guardar dados na base de dados. Aguarda um momento...</p>
+            )}
+            {syncStatus === "error" && (
+              <div className="flex flex-col gap-2">
+                <p className="text-[12px] text-red-400">Ocorreu um erro ao sincronizar os dados. Os teus dados locais estão seguros mas podem não estar guardados na base de dados.</p>
+                {syncDetails.length > 0 && (
+                  <div className="bg-zinc-900 rounded-lg p-3 border border-red-900/40">
+                    <p className="text-[10px] font-bold text-red-400 uppercase tracking-wider mb-2">Detalhes do erro:</p>
+                    {syncDetails.slice(-5).map((detail, i) => (
+                      <p key={i} className="text-[10px] text-zinc-400 font-mono leading-relaxed">{detail}</p>
+                    ))}
+                  </div>
+                )}
+                <div className="flex gap-2 mt-1">
+                  <Button
+                    size="sm"
+                    onClick={() => { setIsSyncModalOpen(false); setIsDebugOpen(true); setIsDebugView("runtime"); }}
+                    className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-[11px] rounded-lg h-8"
+                  >
+                    Ver logs completos
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => { setIsSyncModalOpen(false); setIsDebugOpen(true); setIsDebugView("health"); }}
+                    className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-[11px] rounded-lg h-8"
+                  >
+                    Health Check
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setIsSyncModalOpen(false)} variant="outline" className="border-zinc-800 hover:bg-zinc-900 text-xs text-zinc-400 w-full">
+              Fechar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Diagnóstico de Layout (Shadcn Dialog) */}
       <Dialog open={isDebugOpen} onOpenChange={setIsDebugOpen}>
         <DialogContent className="bg-zinc-950 border border-zinc-800 text-zinc-50 sm:max-w-lg rounded-md shadow-lg">
@@ -3366,7 +3433,7 @@ ${sessionSummary ? `\n### CONTEXTO DA CONVERSA ACTUAL\n${sessionSummary}` : ""}`
                     <Button
                       variant="ghost"
                       size="icon"
-                      className={`rounded-l-none border-l border-zinc-800/50 ${activeSessionId === session.id ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900 opacity-0 group-hover:opacity-100'}`}
+                      className="shrink-0 w-7 h-7 rounded text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800"
                       onClick={(e) => {
                         e.stopPropagation();
                         const newTitle = window.prompt("Novo nome para a conversa:", session.title);
@@ -3377,6 +3444,26 @@ ${sessionSummary ? `\n### CONTEXTO DA CONVERSA ACTUAL\n${sessionSummary}` : ""}`
                       title="Renomear conversa"
                     >
                       <Pencil className="w-3.5 h-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="shrink-0 w-7 h-7 rounded text-zinc-600 hover:text-red-400 hover:bg-zinc-800"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (window.confirm(`Eliminar a conversa "${session.title}"?`)) {
+                          // Soft delete via clearChatHistory (apaga a sessão e mensagens em cascata)
+                          clearRemoteData(session.id);
+                          setChatSessions((prev: any[]) => prev.filter((s: any) => s.id !== session.id));
+                          if (activeSessionId === session.id) {
+                            setMessages([]);
+                            setActiveSessionId(null);
+                          }
+                        }
+                      }}
+                      title="Eliminar conversa"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
                     </Button>
                   </div>
                 ))}
