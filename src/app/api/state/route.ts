@@ -52,17 +52,19 @@ export async function POST(req: Request) {
       case "upsert_strategy":      await upsertStrategy(userId, payload.strategy); break;
       case "delete_strategy":      await deleteStrategy(userId, payload.id); break;
       case "update_user_profile":  await upsertUserProfile(userId, payload.profile); break;
-      case "clear_all":
+      case "clear_all": {
+        const now = new Date().toISOString();
         await Promise.all([
-          supabaseAdmin.from("transactions").delete().eq("user_id", userId),
-          supabaseAdmin.from("accounts").delete().eq("user_id", userId),
-          supabaseAdmin.from("goals").delete().eq("user_id", userId),
-          supabaseAdmin.from("budget_limits").delete().eq("user_id", userId),
-          supabaseAdmin.from("strategies").delete().eq("user_id", userId),
-          supabaseAdmin.from("chat_messages").delete().eq("user_id", userId),
-          supabaseAdmin.from("user_profiles").delete().eq("user_id", userId),
+          supabaseAdmin.from("transactions").update({ status: "deleted" }).eq("user_id", userId),
+          supabaseAdmin.from("accounts").update({ status: "deleted", archived_at: now }).eq("user_id", userId),
+          supabaseAdmin.from("goals").update({ status: "deleted", archived_at: now }).eq("user_id", userId),
+          supabaseAdmin.from("strategies").update({ status: "deleted", archived_at: now }).eq("user_id", userId),
+          supabaseAdmin.from("chat_sessions").update({ status: "deleted", archived_at: now }).eq("user_id", userId),
+          supabaseAdmin.from("chat_messages").update({ status: "deleted" }).eq("user_id", userId),
+          // budget_limits não tem status — mantém (são configurações)
         ]);
         break;
+      }
       default:
         return NextResponse.json({ error: `Acção desconhecida: ${action}` }, { status: 400 });
     }

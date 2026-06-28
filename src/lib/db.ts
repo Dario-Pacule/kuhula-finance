@@ -77,17 +77,20 @@ export async function loadUserState(userId: string): Promise<AppState | null> {
         .from("accounts")
         .select("*")
         .eq("user_id", userId)
+        .eq("status", "active")
         .order("name"),
       supabaseAdmin
         .from("transactions")
         .select("*")
         .eq("user_id", userId)
+        .eq("status", "active")
         .order("date", { ascending: false })
         .limit(200),
       supabaseAdmin
         .from("goals")
         .select("*")
         .eq("user_id", userId)
+        .eq("status", "active")
         .order("created_at"),
       supabaseAdmin
         .from("budget_limits")
@@ -97,6 +100,7 @@ export async function loadUserState(userId: string): Promise<AppState | null> {
         .from("strategies")
         .select("*")
         .eq("user_id", userId)
+        .eq("status", "active")
         .order("created_at"),
       supabaseAdmin
         .from("user_profiles")
@@ -195,7 +199,7 @@ export async function upsertAccount(
 export async function deleteAccount(userId: string, name: string) {
   const { error } = await supabaseAdmin
     .from("accounts")
-    .delete()
+    .update({ status: "deleted", archived_at: new Date().toISOString() })
     .eq("user_id", userId)
     .eq("name", name);
 
@@ -247,7 +251,7 @@ export async function insertTransaction(
 export async function deleteTransaction(userId: string, txId: string) {
   const { error } = await supabaseAdmin
     .from("transactions")
-    .delete()
+    .update({ status: "deleted" })
     .eq("user_id", userId)
     .eq("id", txId);
 
@@ -282,7 +286,7 @@ export async function upsertGoal(userId: string, goal: Goal) {
 export async function deleteGoal(userId: string, title: string) {
   const { error } = await supabaseAdmin
     .from("goals")
-    .delete()
+    .update({ status: "deleted", archived_at: new Date().toISOString() })
     .eq("user_id", userId)
     .ilike("title", title);
 
@@ -341,7 +345,7 @@ export async function upsertStrategy(
 export async function deleteStrategy(userId: string, strategyId: string) {
   const { error } = await supabaseAdmin
     .from("strategies")
-    .delete()
+    .update({ status: "deleted", archived_at: new Date().toISOString() })
     .eq("user_id", userId)
     .eq("id", strategyId);
 
@@ -357,6 +361,7 @@ export async function loadChatSessions(userId: string) {
     .from("chat_sessions")
     .select("id, title, updated_at")
     .eq("user_id", userId)
+    .eq("status", "active")
     .order("updated_at", { ascending: false });
 
   if (error) return [];
@@ -419,7 +424,7 @@ export async function loadChatHistory(
     .select("id, role, content, created_at")
     .eq("user_id", userId)
     .eq("session_id", sessionId)
-    .is("deleted_at", null)  // Excluir mensagens com soft delete
+    .eq("status", "active")
     .order("id", { ascending: false })
     .limit(limit);
 
@@ -432,13 +437,33 @@ export async function loadChatHistory(
   }));
 }
 
-export async function clearChatHistory(userId: string, sessionId: string) {
-  // Se apagarmos a sessão, as mensagens são apagadas em cascata
+export async function clearChatHistory(userId: string, sessionId?: string) {
+  if (sessionId) {
+    // Arquivar sessão específica (mensagens ficam mas sessão fica inactiva)
+    const { error } = await supabaseAdmin
+      .from("chat_sessions")
+      .update({ status: "deleted", archived_at: new Date().toISOString() })
+      .eq("user_id", userId)
+      .eq("id", sessionId);
+
+    if (error) throw error;
+
+    // Marcar mensagens da sessão como eliminadas
+    await supabaseAdmin
+      .from("chat_messages")
+      .update({ status: "deleted" })
+      .eq("user_id", userId)
+      .eq("session_id", sessionId);
+
+    return;
+  }
+
+  // Arquivar todas as sessões do utilizador
   await supabaseAdmin
     .from("chat_sessions")
-    .delete()
+    .update({ status: "deleted", archived_at: new Date().toISOString() })
     .eq("user_id", userId)
-    .eq("id", sessionId);
+    .eq("status", "active");
 }
 
 // ─────────────────────────────────────────────

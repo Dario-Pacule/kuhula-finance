@@ -40,7 +40,7 @@ export async function DELETE(req: Request) {
     if (!userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
     const { error } = await supabaseAdmin
       .from("chat_messages")
-      .update({ deleted_at: new Date().toISOString() })
+      .update({ status: "deleted" })
       .eq("id", body.messageId)
       .eq("user_id", userId);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
