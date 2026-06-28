@@ -3425,7 +3425,7 @@ ${sessionSummary ? `\n### CONTEXTO DA CONVERSA ACTUAL\n${sessionSummary}` : ""}`
                     <Button
                       variant="ghost"
                       className={`flex-1 justify-start text-left text-sm rounded-r-none ${activeSessionId === session.id ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-400 hover:text-zinc-300 hover:bg-zinc-900'}`}
-                      onClick={() => { switchChatSession(session.id); setIsDrawerOpen(false); }}
+                      onClick={() => { switchChatSession(session.id); setIsDrawerOpen(false); handleSetActiveTab("chat"); }}
                     >
                       <MessageSquare className="w-4 h-4 mr-2 shrink-0 opacity-50" />
                       <span className="truncate">{session.title}</span>
