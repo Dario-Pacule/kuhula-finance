@@ -203,6 +203,29 @@ Não perguntes ao utilizador antes de usar — é uma acção transparente de ba
       required: [],
     },
   },
+  {
+    name: "requestContext",
+    description: `Pede dados financeiros específicos quando precisas de mais informação.
+Usa quando o contexto actual não tem os dados suficientes para responder com precisão.
+Exemplos:
+- Transacções de um mês específico → {dataType:"transactions", month:"2026-05"}
+- Histórico de uma conta → {dataType:"account_history", account:"BCI"}
+- Todas as metas detalhadas → {dataType:"goals"}
+Não uses para dados que já estão no contexto.`,
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        dataType: {
+          type: "STRING",
+          enum: ["transactions", "goals", "budget_limits", "account_history", "strategies", "all"],
+        },
+        month:   { type: "STRING",  description: "AAAA-MM para filtrar transacções." },
+        account: { type: "STRING",  description: "Nome da conta para account_history." },
+        limit:   { type: "INTEGER", description: "Máx. de registos (default 20)." },
+      },
+      required: ["dataType"],
+    },
+  },
 ];
 
 const GEMINI_TOOLS = [{ functionDeclarations: TOOL_DECLARATIONS }];
@@ -215,6 +238,45 @@ const FINANCIAL_TOOLS = new Set([
 ]);
 
 // ─────────────────────────────────────────────────────────────
+// CONTEXT RESOLVER — para a tool requestContext
+// ─────────────────────────────────────────────────────────────
+
+function resolveContextRequest(args: any, context: any): any {
+  if (!context) return { error: "Sem contexto disponível" };
+
+  const { dataType, month, account, limit = 20 } = args;
+  const { transactions = [], goals = [], budgetLimits = {}, strategies = [] } = context;
+
+  switch (dataType) {
+    case "transactions": {
+      let txs = transactions;
+      if (month) txs = txs.filter((t: any) => t.date?.startsWith(month));
+      return txs.slice(-limit).map((t: any) => ({
+        date: t.date, type: t.type, amount: t.amount,
+        description: t.description, category: t.category, account: t.account,
+      }));
+    }
+    case "account_history": {
+      let txs = transactions;
+      if (account) txs = txs.filter((t: any) => t.account === account);
+      return txs.slice(-limit).map((t: any) => ({
+        date: t.date, type: t.type, amount: t.amount, description: t.description,
+      }));
+    }
+    case "goals":
+      return goals;
+    case "budget_limits":
+      return budgetLimits;
+    case "strategies":
+      return strategies;
+    case "all":
+      return { transactions: transactions.slice(-limit), goals, budgetLimits, strategies };
+    default:
+      return { error: `dataType desconhecido: ${dataType}` };
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
 // GEMINI — CICLO COMPLETO COM TOOL CALLING
 // ─────────────────────────────────────────────────────────────
 
@@ -222,7 +284,8 @@ async function runGeminiCycle(
   history: GeminiContent[],
   systemInstruction: string,
   model: string,
-  apiKey: string
+  apiKey: string,
+  additionalContext?: any
 ): Promise<NormalizedResponse> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
@@ -299,6 +362,15 @@ async function runGeminiCycle(
         };
       }
 
+      // requestContext → resolve com dados do body e continua o ciclo
+      if (name === "requestContext") {
+        const contextData = resolveContextRequest(args, additionalContext);
+        const result = { success: true, data: contextData };
+        toolCallsMade.push({ name, args, result });
+        responsesParts.push({ functionResponse: { name, response: result } });
+        continue;
+      }
+
       // Tools financeiras → interrompe e devolve ao frontend para confirmação
       if (FINANCIAL_TOOLS.has(name)) {
         return {
@@ -337,7 +409,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
   }
 
-  const { history, systemInstruction, model, clientApiKey } = body;
+  const { history, systemInstruction, model, clientApiKey, additionalContext } = body;
 
   const apiKey = clientApiKey || process.env.GEMINI_API_KEY;
 
@@ -361,7 +433,7 @@ export async function POST(req: Request) {
     }));
 
   try {
-    const result = await runGeminiCycle(geminiHistory, systemInstruction, model, apiKey);
+    const result = await runGeminiCycle(geminiHistory, systemInstruction, model, apiKey, additionalContext);
     return NextResponse.json(result);
   } catch (err: any) {
     const errorMsg = err.message ?? "Erro interno";

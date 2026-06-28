@@ -1299,6 +1299,13 @@ ${sessionSummary ? `\n### CONTEXTO DA CONVERSA ACTUAL\n${sessionSummary}` : ""}`
         systemInstruction,
         model,
         clientApiKey,
+        // Contexto completo disponível para requestContext tool
+        additionalContext: {
+          transactions: currentState.transactions,
+          goals: currentState.goals,
+          budgetLimits: currentState.budgetLimits,
+          strategies: currentState.strategies ?? [],
+        },
       }),
     });
 
@@ -1472,13 +1479,17 @@ ${sessionSummary ? `\n### CONTEXTO DA CONVERSA ACTUAL\n${sessionSummary}` : ""}`
 
       if (secondRes.text) {
         const modelMsg: ChatMessage = { role: "model", parts: [{ text: secondRes.text }], timestamp: new Date().toISOString() };
-        // Preserva a mensagem interactiva no ecrã adicionando ao prev
         setMessages(prev => {
           const updated = [...prev, modelMsg];
           localStorage.setItem("kuhula_chat_history", JSON.stringify(updated));
           return updated;
         });
-        persistChatMessages([{ role: "model", content: secondRes.text }]);
+        // Persiste na DB: a confirmação + operações + resposta da IA
+        const operationSummary = toolCalls.map(tc => describeToolCall(tc.name, tc.args)).join(" | ");
+        persistChatMessages([
+          { role: "user", content: `✅ Confirmado: ${operationSummary}` },
+          { role: "model", content: secondRes.text },
+        ]);
       }
       if (secondRes.usage) {
         updateTokenStats(secondRes.usage.promptTokens, secondRes.usage.completionTokens);
@@ -1687,6 +1698,7 @@ ${sessionSummary ? `\n### CONTEXTO DA CONVERSA ACTUAL\n${sessionSummary}` : ""}`
         case "createOrUpdateGoal": {
           const idx = stateCopy.goals.findIndex(g => g.title.toLowerCase() === args.title.toLowerCase());
           const deadline = args.deadline || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+          const prevAmount = idx > -1 ? stateCopy.goals[idx].currentAmount : 0;
 
           const goalData: Goal = {
             title: args.title,
@@ -1705,6 +1717,23 @@ ${sessionSummary ? `\n### CONTEXTO DA CONVERSA ACTUAL\n${sessionSummary}` : ""}`
             stateCopy.goals.push(goalData);
           }
 
+          // Transacção de auditoria se houve depósito na meta
+          const newAmount = goalData.currentAmount;
+          const diff = newAmount - prevAmount;
+          if (diff !== 0) {
+            const auditTx = {
+              id: `audit-goal-${Date.now()}`,
+              description: `${diff > 0 ? "Depósito" : "Levantamento"} meta: ${args.title}`,
+              amount: Math.abs(diff),
+              type: (diff > 0 ? "expense" : "income") as "income" | "expense",
+              category: "Poupança / Metas",
+              account: "Interno",
+              date: new Date().toISOString().split("T")[0],
+              isRecurring: false,
+            };
+            stateCopy.transactions.push(auditTx);
+          }
+
           result = { success: true, message: `Meta "${args.title}" atualizada com sucesso.` };
           break;
         }
@@ -1721,7 +1750,25 @@ ${sessionSummary ? `\n### CONTEXTO DA CONVERSA ACTUAL\n${sessionSummary}` : ""}`
         }
 
         case "adjustAccountBalance": {
+          const prevBalance = stateCopy.accounts[args.accountName] ?? 0;
           stateCopy.accounts[args.accountName] = args.balance;
+          const diff = args.balance - prevBalance;
+
+          // Transacção de auditoria para o ajuste de saldo
+          if (diff !== 0) {
+            const auditTx = {
+              id: `audit-bal-${Date.now()}`,
+              description: `Ajuste de saldo: ${args.accountName}`,
+              amount: Math.abs(diff),
+              type: (diff > 0 ? "income" : "expense") as "income" | "expense",
+              category: "Ajuste de Saldo",
+              account: args.accountName,
+              date: new Date().toISOString().split("T")[0],
+              isRecurring: false,
+            };
+            stateCopy.transactions.push(auditTx);
+          }
+
           result = { success: true, message: `Saldo ajustado para ${args.balance} MT.` };
           break;
         }
@@ -1737,7 +1784,21 @@ ${sessionSummary ? `\n### CONTEXTO DA CONVERSA ACTUAL\n${sessionSummary}` : ""}`
         }
 
         case "setBudgetLimit": {
+          const prevLimit = stateCopy.budgetLimits[args.category];
           stateCopy.budgetLimits[args.category] = args.limitAmount;
+          // Registo de auditoria em transacções (tipo info, amount 0 não afecta saldos)
+          const auditTx = {
+            id: `audit-budget-${Date.now()}`,
+            description: `Limite definido: ${args.category} → ${args.limitAmount.toLocaleString("pt-MZ")} MT/mês${prevLimit !== undefined ? ` (anterior: ${prevLimit.toLocaleString("pt-MZ")} MT)` : ""}`,
+            amount: args.limitAmount,
+            type: "expense" as "expense",
+            category: "Configuração de Limite",
+            account: "Interno",
+            date: new Date().toISOString().split("T")[0],
+            isRecurring: false,
+            isAuditOnly: true, // Flag para não mostrar no painel principal
+          };
+          stateCopy.transactions.push(auditTx);
           result = { success: true, message: `Limite para ${args.category} definido para ${args.limitAmount} MT.` };
           break;
         }
@@ -2531,6 +2592,7 @@ ${sessionSummary ? `\n### CONTEXTO DA CONVERSA ACTUAL\n${sessionSummary}` : ""}`
                         args={msg.interactiveInput.args}
                         answered={msg.interactiveInput.answered}
                         answeredValue={msg.interactiveInput.answeredValue}
+                        operationDetails={msg.isPendingFinancial ? msg.parts?.[0]?.text : undefined}
                         onAnswer={(answer) => handleInteractiveAnswer(i, answer)}
                       />
                     </div>
