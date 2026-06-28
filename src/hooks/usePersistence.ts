@@ -404,7 +404,6 @@ export function usePersistence({
     }
   }, [startSync, endSync]);
 
-  return { 
   const deleteMessage = useCallback(async (messageId: number) => {
     try {
       const res = await fetch("/api/chat-history", {
