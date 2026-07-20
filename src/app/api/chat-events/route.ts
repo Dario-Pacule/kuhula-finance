@@ -37,12 +37,12 @@ export async function POST(req: Request) {
   const msgCount = events.filter((e: any) => ["user_message", "ai_response"].includes(e.eventType)).length;
 
   if (msgCount > 0 || promptSum > 0) {
-    await supabaseAdmin.rpc("increment_session_stats", {
+    supabaseAdmin.rpc("increment_session_stats", {
       p_session_id: events[0].sessionId,
       p_message_count: msgCount,
       p_prompt_tokens: promptSum,
       p_completion_tokens: completionSum,
-    }).catch(() => {});
+    }).then(() => {}).catch(() => {});
   }
 
   return NextResponse.json({ success: true, inserted: rows.length });
